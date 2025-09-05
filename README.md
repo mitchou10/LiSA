@@ -1,2 +1,14 @@
-# LiSA
-LISA est une application qui analyse les textes avant leur envoi à un modèle de langage (LLM) pour détecter et prévenir les prompts malveillants. Elle combine analyse linguistique et règles de sécurité pour fournir un verdict clair et un rapport détaillé, tout en restant facile à intégrer dans vos applications ou workflows.
+# LISA – Linguistic Intelligence for Surveillance & Analysis
+
+**LISA** est une application avancée conçue pour analyser le contenu textuel avant qu’il ne soit envoyé à un modèle de langage (LLM), afin de détecter et prévenir les prompts malveillants. Elle combine intelligence linguistique et techniques d’analyse pour protéger les utilisateurs et les systèmes d’IA.
+
+
+## Fonctionnalités
+
+* **Analyse linguistique avancée** : LISA inspecte la structure, le style et le contexte des textes pour détecter des patterns suspects.
+* **Détection de prompts malveillants** : Identification automatique des tentatives de manipulation, d’injection ou de contenu dangereux.
+* **Surveillance en temps réel** : Analyse les textes avant envoi à un LLM pour éviter les risques.
+
+
+
+
