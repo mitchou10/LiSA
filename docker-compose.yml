@@ -1,0 +1,39 @@
+
+services:
+  consumer:
+    image: github.com/titigmr/consumer:v0.1.0
+    container_name: consumer
+    volumes:
+      - ./apps/server/worker:/app/worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: guard
+    ports:
+      - "8082:8082"
+    depends_on:
+      - db
+      - broker
+    env_file:
+      -  ${PWD}/.env.example
+  broker:
+    image: rabbitmq:management
+    container_name: rabbitmq
+    volumes:
+      - broker-lib:/var/lib/rabbitmq
+      - broker-log:/var/log/rabbitmq
+    restart: always
+    ports:
+      - 5672:5672
+      - 15672:15672
+    environment:
+      RABBITMQ_DEFAULT_USER: kalo
+      RABBITMQ_DEFAULT_PASS: kalo
+
+volumes:
+  db-data:
+    driver: local
+  broker-lib:
+    driver: local
+  broker-log:
+    driver: local

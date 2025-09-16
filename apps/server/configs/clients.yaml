@@ -1,0 +1,7 @@
+- client_id: LiSA
+  #client_secret: $CLIENT_SECRET_1
+  authorizations:
+    # - service: all # all access
+    #   quotas: 100 Quotas for each services
+    - service: LiSA
+      quotas: 50

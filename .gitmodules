@@ -1,0 +1,3 @@
+[submodule "async-api"]
+	path = async-api
+	url = git@github.com:titigmr/async-api.git

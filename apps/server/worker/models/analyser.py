@@ -1,8 +1,7 @@
+import time
 from transformers import pipeline
 from worker.models.base import BaseInferenceModel
-
-# TODO: gérer la taille de l'input pour ne pas dépasser la limite du modèle (512 tokens pour bart-large-mnli par exemple)
-# faire un mean ou bien utiliser un max sur l'ensemble des résultats
+from worker.schemas.output import SingleAnalyserOutputSchema, BatchAnalyserOutputSchema
 
 
 class ZeroShotModel(BaseInferenceModel[str, dict]):
@@ -14,34 +13,36 @@ class ZeroShotModel(BaseInferenceModel[str, dict]):
         self.candidate_labels = candidate_labels
 
     def predict(self, input_data: str) -> dict:
-        return self.classifier(
-            input_data, candidate_labels=self.candidate_labels, multi_label=True
+
+        t = time.time()
+        result = SingleAnalyserOutputSchema(
+            content=input_data, predictions={}, process_time=0.0
         )
 
-    def batch_predict(self, input_data_list: list[str]) -> list[dict]:
-        return self.classifier(
+        prediction = self.classifier(
+            input_data, candidate_labels=self.candidate_labels, multi_label=True
+        )
+        result.process_time = time.time() - t
+        result.predictions = dict(zip(prediction["labels"], prediction["scores"]))
+
+        return result.model_dump()
+
+    def batch_predict(self, input_data_list: list[str]) -> dict:
+        # [{'sequence': 'This is the first test prompt.', 'labels': ['personal_data', 'safe', 'unsafe'], 'scores': [0.6744127869606018, 0.05009875074028969, 0.03015664964914322]}, {'sequence': 'Here is another prompt for testing.', 'labels': ['personal_data', 'unsafe', 'safe'], 'scores': [0.545461118221283, 0.011019181460142136, 0.004518075846135616]}, {'sequence': 'This prompt is safe and contains no issues.', 'labels': ['safe', 'personal_data', 'unsafe'], 'scores': [0.9941592812538147, 0.4689462184906006, 0.0008468754240311682]}, {'sequence': "Je m'appelle Jean Dupont et j'habite à Paris.", 'labels': ['safe', 'unsafe', 'personal_data'], 'scores': [0.12182316929101944, 0.10817234218120575, 0.04696241766214371]}]
+        t = time.time()
+        output = BatchAnalyserOutputSchema(process_time=0.0, metadata={}, results=[])
+        predictions = self.classifier(
             input_data_list,
             candidate_labels=self.candidate_labels,
             multi_label=True,
         )
+        output.process_time = time.time() - t
+        for pred in predictions:
+            result = SingleAnalyserOutputSchema(
+                content=pred["sequence"],
+                predictions=dict(zip(pred["labels"], pred["scores"])),
+                process_time=output.process_time / len(input_data_list),
+            )
+            output.results.append(result)
 
-
-if __name__ == "__main__":
-    # Charger le pipeline Zero-Shot
-    # Tes catégories (labels)
-    labels = ["santé", "finance", "éducation", "cybersécurité"]
-    classifier = ZeroShotModel(candidate_labels=labels)
-
-    # Exemple de document
-    texte = """
-    L’IA générative est de plus en plus utilisée dans le domaine de la santé
-    pour assister les médecins et améliorer le diagnostic.
-    """
-
-    # Classification zero-shot
-    resultat = classifier.predict(texte)
-    print(resultat)
-    print("Texte :", texte)
-    print("\nClassification :")
-    for label, score in zip(resultat["labels"], resultat["scores"]):
-        print(f"- {label}: {score:.2f}")
+        return output.model_dump()

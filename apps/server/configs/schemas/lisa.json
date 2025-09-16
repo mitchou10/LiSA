@@ -1,0 +1,31 @@
+{
+    "description": "Schema for input data validation.",
+    "properties": {
+        "text": {
+            "anyOf": [
+                {
+                    "type": "string"
+                },
+                {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                }
+            ],
+            "description": "The input text to be processed.",
+            "title": "Text"
+        },
+        "extras": {
+            "additionalProperties": true,
+            "description": "Additional parameters for processing.",
+            "title": "Extras",
+            "type": "object"
+        }
+    },
+    "required": [
+        "text"
+    ],
+    "title": "InputSchema",
+    "type": "object"
+}
