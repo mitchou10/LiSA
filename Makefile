@@ -12,6 +12,6 @@ build-test:
 	docker build -t lisa-test:latest --target=test .
 
 
-run-test:
+run-test: build-test
 	@echo "Running LISA Test Docker container..."
-	docker run --rm -it -v ${PWD}/apps/server/worker:/app/worker -v ${PWD}/apps/server/tests:/app/tests --env-file ${PWD}/.env.example lisa-test:latest
+	docker run --rm -v ${PWD}/apps/server/worker:/app/worker -v ${PWD}/apps/server/tests:/app/tests --env-file ${PWD}/.env.example lisa-test:latest
