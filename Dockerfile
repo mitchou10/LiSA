@@ -6,7 +6,6 @@ RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/ap
 COPY --from=ghcr.io/astral-sh/uv:latest uv /usr/local/bin/uv
 COPY apps/server/pyproject.toml apps/server/uv.lock  apps/server/.python-version /app/
 RUN uv sync 
-COPY async-api/workers/python/worker.py /app/worker/worker.py
 COPY apps/server/worker/ /app/worker/
 
 ENV PYTHONPATH=/app
