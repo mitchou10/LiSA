@@ -13,7 +13,6 @@ class ZeroShotModel(BaseInferenceModel[str, dict]):
         self.candidate_labels = candidate_labels
 
     def predict(self, input_data: str) -> dict:
-
         t = time.time()
         result = SingleAnalyserOutputSchema(
             content=input_data, predictions={}, process_time=0.0

@@ -1,0 +1,13 @@
+.env
+.vscode*
+*__pycache__*
+*.idea/*
+*prof
+!requirements.txt
+*.egg-info
+notebook/*
+*.log
+*poetry.lock
+fastapi/.venv/
+*.ipynb
+.venv

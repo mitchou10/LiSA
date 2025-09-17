@@ -1,5 +1,6 @@
 from worker.models.base import BaseInferenceModel
 
+
 def test_base_worker():
     class DummyModel(BaseInferenceModel[str, str]):
         def __init__(self):
@@ -14,4 +15,7 @@ def test_base_worker():
     worker = DummyModel()
 
     assert worker.predict("dummy-input") == "dummy-output"
-    assert worker.batch_predict(["dummy-input-1", "dummy-input-2"]) == ["dummy-output", "dummy-output"]
+    assert worker.batch_predict(["dummy-input-1", "dummy-input-2"]) == [
+        "dummy-output",
+        "dummy-output",
+    ]

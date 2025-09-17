@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "aio-pika>=9.5.7",
     "loguru>=0.7.3",
+    "mic-worker>=0.1.0",
 ]
 
 [dependency-groups]

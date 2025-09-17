@@ -1,0 +1,24 @@
+name: CI/CD Workflow
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  run-test:
+    runs-on: actions-runner-controller
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.x
+
+      - name: Install dependencies and run tests
+        run: |
+          make run-test
