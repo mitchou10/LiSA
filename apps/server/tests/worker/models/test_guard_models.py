@@ -15,6 +15,9 @@ def test_guard_model():
     result = guard.predict("This is a test prompt with a secret: my_password")
     logger.debug(f"Single prediction result: {result}")
     assert SingleGuardOutputSchema.model_validate(result)
+    run_result = guard.run("This is a test prompt with a secret: my_password")
+    logger.debug(f"Single run result: {run_result}")
+    assert SingleGuardOutputSchema.model_validate(run_result)
 
     # Test batch prediction
     inputs = [
@@ -25,6 +28,11 @@ def test_guard_model():
     ]
     results = guard.batch_predict(inputs)
     result = BatchGuardOutputSchema.model_validate(results)
+    assert result
+    assert len(result.results) == 4
+    batch_run_result = guard.run(inputs)
+    logger.debug(f"Batch run result: {batch_run_result}")
+    result = BatchGuardOutputSchema.model_validate(batch_run_result)
     assert result
     assert len(result.results) == 4
 

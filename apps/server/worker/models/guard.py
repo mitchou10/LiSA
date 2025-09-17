@@ -5,7 +5,9 @@ from llm_guard import scan_prompt
 from llm_guard.input_scanners import PromptInjection, Secrets
 
 
-class GuardModel(BaseInferenceModel[str, tuple[str, dict[str, float]]]):
+class GuardModel(
+    BaseInferenceModel[str, list[str], SingleGuardOutputSchema, BatchGuardOutputSchema]
+):
     def __init__(self):
         super().__init__("llm-guard")
         self.input_scanners = [
@@ -42,3 +44,11 @@ class GuardModel(BaseInferenceModel[str, tuple[str, dict[str, float]]]):
 
         output_schema.process_time = time.time() - t
         return output_schema.model_dump()
+
+    def run(self, input_data):
+        if self._is_valid_schema(input_data, str):
+            return self.predict(input_data)
+        elif self._is_valid_schema(input_data, list):
+            return self.batch_predict(input_data)
+        else:
+            raise ValueError("Invalid input data format.")

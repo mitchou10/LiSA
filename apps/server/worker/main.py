@@ -46,7 +46,12 @@ logger.add(sys.stdout, level="INFO")
 
 
 class LiSASyncTask(SyncTaskInterface):
-    def __init__(self, model_name: Literal["guard", "analyser"]) -> None:
+    def __init__(
+        self,
+        model_name: Literal["guard", "analyser"] = os.environ.get(
+            "MODEL_NAME", "guard"
+        ),
+    ) -> None:
         super().__init__()
         if model_name not in ["guard", "analyser"]:
             raise ValueError(f"Unknown model name: {model_name}")
@@ -59,9 +64,7 @@ class LiSASyncTask(SyncTaskInterface):
         elif model_name == "analyser":
             from worker.models.analyser import ZeroShotModel
 
-            # Tes catégories (labels)
-            labels = ["santé", "finance", "éducation", "cybersécurité"]
-            self.model = ZeroShotModel(candidate_labels=labels)
+            self.model = ZeroShotModel()
         else:
             raise NotImplementedError(
                 "PersonalDataModelDetection is not implemented yet"
@@ -73,20 +76,10 @@ class LiSASyncTask(SyncTaskInterface):
         task_id = incoming_message.task_id
         body: dict[Any, Any] = incoming_message.body
         logging.info(f"Task_id: {task_id}")
+        progress(0.1)
         data = body.get("data")
-        if data and isinstance(data, list):
-            logger.info(
-                f"Using model {self.model_name} to process batch of {len(data)} items"
-            )
-            results = self.model.batch_predict(data)
-
-            return results
-        elif data and isinstance(data, str):
-            logger.info(f"Using model {self.model_name} to process single item")
-            results = self.model.predict(data)
-            return results
-        else:
-            raise ValueError("No data provided in the message body")
+        progress(1.0)
+        return self.model.run(data)
 
 
 OUT_QUEUE_NAME = os.environ.get("OUT_QUEUE_NAME", "example_out_queue")
@@ -105,9 +98,7 @@ async def main() -> None:
         # In out queues
         amqp_in_queue=IN_QUEUE_NAME,
         amqp_out_queue=OUT_QUEUE_NAME,
-        task_provider=LiSASyncTask(
-            model_name=os.environ.get("MODEL_NAME", "guard")
-        ),  # or  lambda:  MySyncTask()
+        task_provider=LiSASyncTask,  # or  lambda:  MySyncTask()
         worker_mode=Infinite(concurrency=WORKER_CONCURRENCY),  # or OnShot(),
         # Optional : HealthCheck
         health_check_config=HealthCheckConfig(host="127.0.0.1", port=8000),  # or None
