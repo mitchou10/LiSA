@@ -1,16 +1,18 @@
 import { useState } from "react";
-import { Shield, ScanSearch, Network } from "lucide-react";
+import { Shield, ScanSearch, Network, Languages } from "lucide-react";
 import { cn } from "./lib/utils";
+import { useI18n } from "./lib/i18n.jsx";
 import AnalyzePage from "./pages/AnalyzePage";
 import ServicesPage from "./pages/ServicesPage";
 
 const NAV = [
-  { id: "analyze", label: "Analyse", icon: ScanSearch },
-  { id: "services", label: "Services & Tâches", icon: Network },
+  { id: "analyze", labelKey: "nav.analyze", icon: ScanSearch },
+  { id: "services", labelKey: "nav.services", icon: Network },
 ];
 
 export default function App() {
   const [page, setPage] = useState("analyze");
+  const { t, lang, setLanguage } = useI18n();
 
   return (
     <div className="min-h-screen bg-background">
@@ -22,9 +24,7 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-lg font-semibold leading-tight">LiSA</h1>
-              <p className="text-xs text-muted-foreground">
-                Détection de jailbreak, prompt injection &amp; supervision
-              </p>
+              <p className="text-xs text-muted-foreground">{t("app.subtitle")}</p>
             </div>
           </div>
 
@@ -45,11 +45,21 @@ export default function App() {
                   )}
                 >
                   <Icon className="h-4 w-4" />
-                  {item.label}
+                  {t(item.labelKey)}
                 </button>
               );
             })}
           </nav>
+
+          <button
+            type="button"
+            onClick={() => setLanguage(lang === "en" ? "fr" : "en")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            title="Switch language"
+          >
+            <Languages className="h-4 w-4" />
+            {lang === "en" ? "FR" : "EN"}
+          </button>
         </div>
       </header>
 

@@ -1,21 +1,17 @@
 import { ShieldCheck, ShieldAlert, Clock } from "lucide-react";
 import { Badge } from "./components/ui/badge";
 import { cn } from "./lib/utils";
-
-const LABELS = {
-  PromptInjection: "Prompt Injection / Jailbreak",
-  Secrets: "Secrets / Données sensibles",
-  Toxicity: "Toxicité",
-};
+import { useI18n } from "./lib/i18n.jsx";
 
 function ScannerRow({ name, flagged, score }) {
+  const { t } = useI18n();
   const pct = Math.round((score ?? 0) * 100);
   return (
     <div className="rounded-lg border border-border bg-background/40 p-4">
       <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">{LABELS[name] || name}</span>
+        <span className="text-sm font-medium">{t(`scanner.${name}`)}</span>
         <Badge variant={flagged ? "destructive" : "success"}>
-          {flagged ? "Détecté" : "OK"}
+          {flagged ? t("results.detected") : t("results.ok")}
         </Badge>
       </div>
       <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -28,13 +24,14 @@ function ScannerRow({ name, flagged, score }) {
         />
       </div>
       <div className="mt-1.5 text-xs text-muted-foreground">
-        Score : {Number(score ?? 0).toFixed(3)} ({pct}%)
+        {t("results.score")} : {Number(score ?? 0).toFixed(3)} ({pct}%)
       </div>
     </div>
   );
 }
 
 export default function Results({ result, loading, error }) {
+  const { t } = useI18n();
   if (error) {
     return (
       <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
@@ -56,7 +53,7 @@ export default function Results({ result, loading, error }) {
   if (!result) {
     return (
       <p className="text-sm text-muted-foreground">
-        Lancez une analyse pour voir les résultats ici.
+        {t("results.empty")}
       </p>
     );
   }
@@ -85,8 +82,8 @@ export default function Results({ result, loading, error }) {
         )}
         <span>
           {anyFlagged
-            ? "Contenu suspect détecté"
-            : "Aucun risque détecté"}
+            ? t("results.verdict.danger")
+            : t("results.verdict.safe")}
         </span>
       </div>
 
@@ -104,7 +101,7 @@ export default function Results({ result, loading, error }) {
       {result.process_time !== undefined && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Clock className="h-3.5 w-3.5" />
-          Temps de traitement : {Number(result.process_time).toFixed(3)} s
+          {t("results.processTime")} : {Number(result.process_time).toFixed(3)} s
           {result.metadata?.mock && (
             <Badge variant="muted" className="ml-2">
               mock

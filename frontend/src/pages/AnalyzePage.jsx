@@ -13,8 +13,10 @@ import { Input } from "../components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import Results from "../Results";
 import { mockAnalyze } from "../lib/mockApi";
+import { useI18n } from "../lib/i18n.jsx";
 
 export default function AnalyzePage() {
+  const { t } = useI18n();
   const [tab, setTab] = useState("text");
   const [text, setText] = useState("");
   const [json, setJson] = useState("");
@@ -47,11 +49,11 @@ export default function AnalyzePage() {
     try {
       payload = buildPayload();
     } catch {
-      setError("JSON invalide. Vérifiez la syntaxe.");
+      setError(t("analyze.error.json"));
       return;
     }
     if (tab === "url" && !/^https?:\/\/.+/i.test(url.trim())) {
-      setError("URL invalide. Elle doit commencer par http:// ou https://");
+      setError(t("analyze.error.url"));
       return;
     }
     setLoading(true);
@@ -59,7 +61,7 @@ export default function AnalyzePage() {
       const res = await mockAnalyze(payload);
       setResult(res);
     } catch (err) {
-      setError(err.message || "Une erreur est survenue.");
+      setError(err.message || t("analyze.error.generic"));
     } finally {
       setLoading(false);
     }
@@ -76,22 +78,20 @@ export default function AnalyzePage() {
       {/* Left: input */}
       <Card>
         <CardHeader>
-          <CardTitle>Entrée</CardTitle>
-          <CardDescription>
-            Choisissez un format puis lancez l'analyse (Ctrl/Cmd + Entrée).
-          </CardDescription>
+          <CardTitle>{t("analyze.input.title")}</CardTitle>
+          <CardDescription>{t("analyze.input.desc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="w-full">
               <TabsTrigger value="text" className="flex-1">
-                <FileText className="h-4 w-4" /> Texte
+                <FileText className="h-4 w-4" /> {t("analyze.tab.text")}
               </TabsTrigger>
               <TabsTrigger value="json" className="flex-1">
-                <Braces className="h-4 w-4" /> JSON
+                <Braces className="h-4 w-4" /> {t("analyze.tab.json")}
               </TabsTrigger>
               <TabsTrigger value="url" className="flex-1">
-                <LinkIcon className="h-4 w-4" /> URL
+                <LinkIcon className="h-4 w-4" /> {t("analyze.tab.url")}
               </TabsTrigger>
             </TabsList>
 
@@ -101,7 +101,7 @@ export default function AnalyzePage() {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder="Collez ou écrivez le texte à analyser…"
+                placeholder={t("analyze.text.placeholder")}
                 className="font-sans"
               />
             </TabsContent>
@@ -121,10 +121,10 @@ export default function AnalyzePage() {
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder="https://exemple.com/page-a-analyser"
+                placeholder="https://example.com/page-to-analyze"
               />
               <p className="mt-2 text-xs text-muted-foreground">
-                Le contenu de l'URL sera récupéré et analysé (mock).
+                {t("analyze.url.hint")}
               </p>
             </TabsContent>
           </Tabs>
@@ -132,10 +132,10 @@ export default function AnalyzePage() {
           <div className="mt-4 flex items-center gap-3">
             <Button onClick={analyze} disabled={!canAnalyze}>
               <Play className="h-4 w-4" />
-              {loading ? "Analyse…" : "Analyser"}
+              {loading ? t("analyze.running") : t("analyze.run")}
             </Button>
             <span className="text-xs text-muted-foreground">
-              Ctrl/Cmd + Entrée
+              {t("analyze.shortcut")}
             </span>
           </div>
         </CardContent>
@@ -144,8 +144,8 @@ export default function AnalyzePage() {
       {/* Right: results */}
       <Card>
         <CardHeader>
-          <CardTitle>Résultats</CardTitle>
-          <CardDescription>Verdict global et score par scanner.</CardDescription>
+          <CardTitle>{t("analyze.results.title")}</CardTitle>
+          <CardDescription>{t("analyze.results.desc")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Results result={result} loading={loading} error={error} />

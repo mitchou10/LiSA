@@ -17,29 +17,30 @@ import {
 import { Badge } from "../components/ui/badge";
 import { cn } from "../lib/utils";
 import { SERVICES, TASKS } from "../lib/mockData";
+import { useI18n } from "../lib/i18n.jsx";
 
 const STATUS = {
   pending: {
-    label: "En attente",
+    key: "status.pending",
     badge: "muted",
     icon: Circle,
     color: "text-muted-foreground",
   },
   running: {
-    label: "En cours",
+    key: "status.running",
     badge: "default",
     icon: Loader2,
     color: "text-primary",
     spin: true,
   },
   success: {
-    label: "Succès",
+    key: "status.success",
     badge: "success",
     icon: CheckCircle2,
     color: "text-success",
   },
   error: {
-    label: "Erreur",
+    key: "status.error",
     badge: "destructive",
     icon: XCircle,
     color: "text-destructive",
@@ -55,6 +56,7 @@ function StatusIcon({ status }) {
 }
 
 function TaskNode({ task, byId, depth }) {
+  const { t } = useI18n();
   const meta = STATUS[task.status] || STATUS.pending;
   return (
     <div>
@@ -78,7 +80,7 @@ function TaskNode({ task, byId, depth }) {
           </code>
           <Badge variant="muted">{task.service}</Badge>
           <Badge variant={meta.badge} className="ml-auto">
-            {meta.label}
+            {t(meta.key)}
           </Badge>
         </div>
         {task.error && (
@@ -103,6 +105,7 @@ function TaskNode({ task, byId, depth }) {
 }
 
 export default function ServicesPage() {
+  const { t } = useI18n();
   const byId = Object.fromEntries(TASKS.map((t) => [t.id, t]));
   const childIds = new Set(TASKS.flatMap((t) => t.children || []));
   const roots = TASKS.filter((t) => !childIds.has(t.id));
@@ -112,8 +115,8 @@ export default function ServicesPage() {
       {/* Services */}
       <Card className="h-fit">
         <CardHeader>
-          <CardTitle>Services</CardTitle>
-          <CardDescription>État des workers connectés.</CardDescription>
+          <CardTitle>{t("services.title")}</CardTitle>
+          <CardDescription>{t("services.desc")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {SERVICES.map((svc) => (
@@ -140,9 +143,9 @@ export default function ServicesPage() {
                   </Badge>
                 </div>
                 <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                  <div>in : {svc.in_queue}</div>
-                  <div>out : {svc.out_queue}</div>
-                  <div>quota : {svc.quotas}</div>
+                  <div>{t("services.in")} : {svc.in_queue}</div>
+                  <div>{t("services.out")} : {svc.out_queue}</div>
+                  <div>{t("services.quota")} : {svc.quotas}</div>
                 </div>
               </div>
             </div>
@@ -153,10 +156,8 @@ export default function ServicesPage() {
       {/* Tasks / execution graph */}
       <Card>
         <CardHeader>
-          <CardTitle>Graphe d'exécution</CardTitle>
-          <CardDescription>
-            Suivi des tâches et de leurs sous-tâches (id, route, statut).
-          </CardDescription>
+          <CardTitle>{t("graph.title")}</CardTitle>
+          <CardDescription>{t("graph.desc")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           {roots.map((root) => (
