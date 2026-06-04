@@ -1,13 +1,24 @@
-name: CI/CD Workflow
+name: Unit Tests
 
 on:
-  push:
-    branches:
-      - '**'
+  workflow_call:
+    inputs:
+      PYTHON_VERSION:
+        description: Python version used to run tests
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      PYTHON_VERSION:
+        description: Python version used to run tests
+        required: true
+        type: string
+        default: 3.X
 
 jobs:
   run-test:
-    runs-on: actions-runner-controller
+    name: Run unit tests
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -17,8 +28,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.x
+          python-version: ${{ inputs.PYTHON_VERSION }}
 
       - name: Install dependencies and run tests
-        run: |
-          make run-test
+        run: make run-test
