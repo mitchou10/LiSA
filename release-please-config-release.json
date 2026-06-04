@@ -3,6 +3,8 @@
   "packages": {
     ".": {
       "release-type": "simple",
+      "package-name": "src",
+      "include-component-in-tag": false,
       "prerelease": false
     }
   }
