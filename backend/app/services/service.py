@@ -4,6 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.enums import ServiceType
 from app.models.service import Service
 from app.repositories.service import ServiceRepository
 from app.schemas.service import ServiceCreate, ServiceUpdate
@@ -39,6 +40,21 @@ class ServiceService:
             service = await self.repo.get_by_name(name)
             return [service] if service is not None else []
         return await self.repo.list(limit=limit, offset=offset)
+
+    async def list_page(
+        self,
+        *,
+        q: str | None = None,
+        type_: ServiceType | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[list[Service], int]:
+        """Return a filtered page of services together with the total count."""
+        items = await self.repo.list_filtered(
+            q=q, type_=type_, limit=limit, offset=offset
+        )
+        total = await self.repo.count_filtered(q=q, type_=type_)
+        return items, total
 
     async def update(self, service_id: UUID, data: ServiceUpdate) -> Service:
         service = await self.get(service_id)

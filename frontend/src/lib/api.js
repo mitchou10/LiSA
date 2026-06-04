@@ -51,8 +51,56 @@ export async function getTask(taskId) {
   return request(`/tasks/${taskId}`);
 }
 
-export async function getTasks({ limit = 200, offset = 0 } = {}) {
-  return request(`/tasks?limit=${limit}&offset=${offset}`);
+function buildQuery(params) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") {
+      search.set(key, value);
+    }
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+// Normalize a list response into a paginated envelope. Tolerates an older
+// backend that returns a plain array (no pagination metadata).
+function toPage(data, { limit, offset }) {
+  if (Array.isArray(data)) {
+    return { items: data, total: data.length, limit, offset };
+  }
+  return {
+    items: data?.items ?? [],
+    total: data?.total ?? 0,
+    limit: data?.limit ?? limit,
+    offset: data?.offset ?? offset,
+  };
+}
+
+// Returns the full paginated envelope: { items, total, limit, offset }.
+export async function getTasksPage({
+  userId,
+  status,
+  serviceId,
+  rootsOnly,
+  limit = 20,
+  offset = 0,
+} = {}) {
+  const query = buildQuery({
+    user_id: userId,
+    status,
+    service_id: serviceId,
+    roots_only: rootsOnly,
+    limit,
+    offset,
+  });
+  const data = await request(`/tasks${query}`);
+  return toPage(data, { limit, offset });
+}
+
+// Backward-compatible: returns just the array of tasks.
+export async function getTasks(params = {}) {
+  const page = await getTasksPage({ limit: 200, ...params });
+  return Array.isArray(page) ? page : (page?.items ?? []);
 }
 
 export async function getTaskChildren(taskId) {
@@ -67,8 +115,26 @@ export async function retryTask(taskId) {
   return request(`/tasks/${taskId}/retry`, { method: "POST" });
 }
 
-export async function getServices() {
-  return request("/services");
+export async function deleteTask(taskId) {
+  return request(`/tasks/${taskId}`, { method: "DELETE" });
+}
+
+// Returns the full paginated envelope: { items, total, limit, offset }.
+export async function getServicesPage({
+  q,
+  type,
+  limit = 20,
+  offset = 0,
+} = {}) {
+  const query = buildQuery({ q, type, limit, offset });
+  const data = await request(`/services${query}`);
+  return toPage(data, { limit, offset });
+}
+
+// Backward-compatible: returns just the array of services.
+export async function getServices(params = {}) {
+  const page = await getServicesPage({ limit: 200, ...params });
+  return Array.isArray(page) ? page : (page?.items ?? []);
 }
 
 export { BASE_URL };

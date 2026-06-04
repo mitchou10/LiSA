@@ -68,6 +68,33 @@ class TaskService:
             return await self.repo.list_by_user(user_id, limit=limit, offset=offset)
         return await self.repo.list(limit=limit, offset=offset)
 
+    async def list_page(
+        self,
+        *,
+        user_id: str | None = None,
+        status: TaskStatus | None = None,
+        service_id: UUID | None = None,
+        roots_only: bool = False,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[list[Task], int]:
+        """Return a filtered page of tasks together with the total count."""
+        items = await self.repo.list_filtered(
+            user_id=user_id,
+            status=status,
+            service_id=service_id,
+            roots_only=roots_only,
+            limit=limit,
+            offset=offset,
+        )
+        total = await self.repo.count_filtered(
+            user_id=user_id,
+            status=status,
+            service_id=service_id,
+            roots_only=roots_only,
+        )
+        return items, total
+
     async def list_children(self, task_id: UUID) -> list[Task]:
         await self.get(task_id)
         return await self.repo.list_children(task_id)
@@ -152,5 +179,10 @@ class TaskService:
 
     async def delete(self, task_id: UUID) -> None:
         task = await self.get(task_id)
+        if task.status not in TERMINAL_STATUSES:
+            raise InvalidStateError(
+                "Only finished tasks (success, error or revoked) can be deleted "
+                f"(current state: '{task.status.value}')."
+            )
         await self.repo.delete(task)
         await self.session.commit()

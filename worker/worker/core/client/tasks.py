@@ -19,12 +19,15 @@ class TaskClient(BaseClient):
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
-        """GET /tasks."""
-        return self._request(
+        """GET /tasks (paginated); returns the page items."""
+        page = self._request(
             "GET",
             "/tasks",
             params={"user_id": user_id, "limit": limit, "offset": offset},
         )
+        if isinstance(page, dict):
+            return page.get("items", [])
+        return page or []
 
     def get(self, task_id: str) -> dict[str, Any]:
         """GET /tasks/{task_id}."""

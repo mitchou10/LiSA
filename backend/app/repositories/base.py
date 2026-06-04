@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Generic, TypeVar
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import Base
@@ -27,6 +27,12 @@ class BaseRepository(Generic[ModelType]):
             select(self.model).limit(limit).offset(offset)
         )
         return list(result.scalars().all())
+
+    async def count(self) -> int:
+        result = await self.session.execute(
+            select(func.count()).select_from(self.model)
+        )
+        return int(result.scalar_one())
 
     async def add(self, obj: ModelType) -> ModelType:
         self.session.add(obj)

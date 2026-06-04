@@ -3,6 +3,8 @@ from uuid import UUID
 from fastapi import APIRouter, Query, status
 
 from app.api.deps import ServiceServiceDep
+from app.models.enums import ServiceType
+from app.schemas.pagination import Page
 from app.schemas.service import ServiceCreate, ServiceRead, ServiceUpdate
 
 router = APIRouter(prefix="/services", tags=["services"])
@@ -16,15 +18,21 @@ async def create_service(
     return ServiceRead.model_validate(obj)
 
 
-@router.get("", response_model=list[ServiceRead])
+@router.get("", response_model=Page[ServiceRead])
 async def list_services(
     service: ServiceServiceDep,
-    name: str | None = Query(default=None, description="Filter by exact service name."),
-    limit: int = Query(100, ge=1, le=500),
+    q: str | None = Query(default=None, description="Search by name or description."),
+    type: ServiceType | None = Query(default=None, description="Filter by type."),
+    limit: int = Query(20, ge=1, le=500),
     offset: int = Query(0, ge=0),
-) -> list[ServiceRead]:
-    objs = await service.list(name=name, limit=limit, offset=offset)
-    return [ServiceRead.model_validate(o) for o in objs]
+) -> Page[ServiceRead]:
+    items, total = await service.list_page(q=q, type_=type, limit=limit, offset=offset)
+    return Page(
+        items=[ServiceRead.model_validate(o) for o in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/{service_id}", response_model=ServiceRead)

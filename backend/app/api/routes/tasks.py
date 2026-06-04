@@ -3,6 +3,8 @@ from uuid import UUID
 from fastapi import APIRouter, Query, status
 
 from app.api.deps import TaskServiceDep
+from app.models.enums import TaskStatus
+from app.schemas.pagination import Page
 from app.schemas.task import TaskRead, TaskStatusRead, TaskSubmit, TaskUpdate
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -15,15 +17,32 @@ async def submit_task(payload: TaskSubmit, service: TaskServiceDep) -> TaskRead:
     return TaskRead.model_validate(obj)
 
 
-@router.get("", response_model=list[TaskRead])
+@router.get("", response_model=Page[TaskRead])
 async def list_tasks(
     service: TaskServiceDep,
     user_id: str | None = Query(default=None),
-    limit: int = Query(100, ge=1, le=500),
+    status: TaskStatus | None = Query(default=None, description="Filter by status."),
+    service_id: UUID | None = Query(default=None, description="Filter by service."),
+    roots_only: bool = Query(
+        default=False, description="Only return root tasks (no parent)."
+    ),
+    limit: int = Query(20, ge=1, le=500),
     offset: int = Query(0, ge=0),
-) -> list[TaskRead]:
-    objs = await service.list_all(user_id=user_id, limit=limit, offset=offset)
-    return [TaskRead.model_validate(o) for o in objs]
+) -> Page[TaskRead]:
+    items, total = await service.list_page(
+        user_id=user_id,
+        status=status,
+        service_id=service_id,
+        roots_only=roots_only,
+        limit=limit,
+        offset=offset,
+    )
+    return Page(
+        items=[TaskRead.model_validate(o) for o in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/{task_id}", response_model=TaskRead)
