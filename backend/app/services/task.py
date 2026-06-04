@@ -4,8 +4,10 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.celery_app import dispatch_task
 from app.models.enums import TaskStatus
 from app.models.task import Task
+from app.repositories.service import ServiceRepository
 from app.repositories.task import TaskRepository
 from app.schemas.task import TaskSubmit, TaskUpdate
 from app.services.exceptions import InvalidStateError, NotFoundError
@@ -20,6 +22,16 @@ class TaskService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.repo = TaskRepository(session)
+        self.services = ServiceRepository(session)
+
+    async def _dispatch(self, task: Task) -> None:
+        """Send the task to its service's worker via the broker (best-effort)."""
+        if task.service_id is None:
+            return
+        service = await self.services.get(task.service_id)
+        if service is None:
+            return
+        dispatch_task(service.name, str(task.id), task.input_data)
 
     async def submit(self, data: TaskSubmit) -> Task:
         if data.parent_task_id is not None:
@@ -36,7 +48,7 @@ class TaskService:
         )
         task = await self.repo.add(task)
         await self.session.commit()
-        # NOTE: this is where the task would be dispatched to the broker.
+        await self._dispatch(task)
         return task
 
     async def get(self, task_id: UUID) -> Task:
@@ -66,7 +78,50 @@ class TaskService:
             setattr(task, field, value)
         await self.session.commit()
         await self.session.refresh(task)
+        if task.parent_task_id is not None:
+            await self._rollup_parent(task.parent_task_id)
         return task
+
+    async def _rollup_parent(self, parent_id: UUID) -> None:
+        """Recompute a parent task's status/progress from its children.
+
+        A "group" task has no service of its own, so it never runs on a worker.
+        Instead its state is derived from its children:
+
+        * progress = mean of children progress
+        * status   = success when all children succeed, error if any failed
+          (once everything is terminal), running while any child is active,
+          else pending.
+        """
+        parent = await self.repo.get(parent_id)
+        if parent is None:
+            return
+        children = await self.repo.list_children(parent_id)
+        if not children:
+            return
+
+        statuses = [c.status for c in children]
+        progress = round(sum(c.progress for c in children) / len(children))
+        all_terminal = all(s in TERMINAL_STATUSES for s in statuses)
+
+        if all_terminal:
+            if any(s == TaskStatus.ERROR for s in statuses):
+                status = TaskStatus.ERROR
+            elif all(s == TaskStatus.REVOKED for s in statuses):
+                status = TaskStatus.REVOKED
+            else:
+                status = TaskStatus.SUCCESS
+            progress = 100 if status == TaskStatus.SUCCESS else progress
+        elif any(s == TaskStatus.RUNNING for s in statuses) or progress > 0:
+            status = TaskStatus.RUNNING
+        else:
+            status = TaskStatus.PENDING
+
+        if parent.status != status or parent.progress != progress:
+            parent.status = status
+            parent.progress = progress
+            await self.session.commit()
+            await self.session.refresh(parent)
 
     async def revoke(self, task_id: UUID) -> Task:
         task = await self.get(task_id)
@@ -92,7 +147,7 @@ class TaskService:
         task.output_data = None
         await self.session.commit()
         await self.session.refresh(task)
-        # NOTE: re-dispatch to the broker here.
+        await self._dispatch(task)
         return task
 
     async def delete(self, task_id: UUID) -> None:

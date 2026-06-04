@@ -27,11 +27,44 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://lisa:lisa@db:5432/lisa
       CORS_ORIGINS: '["*"]'
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - lisa
+
+  redis:
+    image: redis:7-alpine
+    container_name: lisa-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - lisa
+
+  anonymize:
+    image: lisa-service-anonymize:v0.1.0
+    container_name: lisa-anonymize
+    build:
+      context: .
+      dockerfile: services/anonymize/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LISA_API_URL: http://server:8000
+    depends_on:
+      redis:
+        condition: service_healthy
+      server:
+        condition: service_started
     networks:
       - lisa
 

@@ -30,19 +30,41 @@ export async function getHealth() {
   return res.json();
 }
 
-export async function submitTask({ userId, inputData, serviceId = null }) {
+export async function submitTask({
+  userId,
+  inputData,
+  serviceId = null,
+  parentTaskId = null,
+}) {
   return request("/tasks", {
     method: "POST",
     body: JSON.stringify({
       user_id: userId,
       input_data: inputData,
       service_id: serviceId,
+      parent_task_id: parentTaskId,
     }),
   });
 }
 
 export async function getTask(taskId) {
   return request(`/tasks/${taskId}`);
+}
+
+export async function getTasks({ limit = 200, offset = 0 } = {}) {
+  return request(`/tasks?limit=${limit}&offset=${offset}`);
+}
+
+export async function getTaskChildren(taskId) {
+  return request(`/tasks/${taskId}/children`);
+}
+
+export async function revokeTask(taskId) {
+  return request(`/tasks/${taskId}/revoke`, { method: "POST" });
+}
+
+export async function retryTask(taskId) {
+  return request(`/tasks/${taskId}/retry`, { method: "POST" });
 }
 
 export async function getServices() {

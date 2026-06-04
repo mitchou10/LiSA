@@ -26,8 +26,32 @@ import { Input } from "../components/ui/input";
 import { Dialog } from "../components/ui/dialog";
 import { cn } from "../lib/utils";
 import { SERVICES, TASKS } from "../lib/mockData";
-import { getServices } from "../lib/api";
+import { getServices, getTasks, revokeTask, retryTask } from "../lib/api";
 import { useI18n } from "../lib/i18n.jsx";
+
+// Backend tasks are a flat list (id, parent_task_id, service_id, status, …).
+// Turn them into the node shape the UI expects: a `children` array of ids,
+// a human `route`, and a resolved `service` name.
+function normalizeTasks(rawTasks, services) {
+  const svcById = new Map(services.map((s) => [s.id, s]));
+  const childrenOf = new Map();
+  for (const task of rawTasks) {
+    if (task.parent_task_id) {
+      if (!childrenOf.has(task.parent_task_id))
+        childrenOf.set(task.parent_task_id, []);
+      childrenOf.get(task.parent_task_id).push(task.id);
+    }
+  }
+  return rawTasks.map((task) => {
+    const svc = task.service_id ? svcById.get(task.service_id) : null;
+    return {
+      ...task,
+      children: childrenOf.get(task.id) || [],
+      service: svc?.name ?? (task.service_id ? task.service_id.slice(0, 8) : "group"),
+      route: svc ? `/${svc.name}` : "/group",
+    };
+  });
+}
 
 const STATUS = {
   pending: {
@@ -310,11 +334,62 @@ function ServiceDialog({ svc, open, onClose }) {
 
 export default function ServicesPage() {
   const { t } = useI18n();
+  const [services, setServices] = useState(SERVICES);
   const [tasks, setTasks] = useState(TASKS);
+  const [tasksReal, setTasksReal] = useState(false);
   const byId = Object.fromEntries(tasks.map((task) => [task.id, task]));
   const childIds = new Set(tasks.flatMap((task) => task.children || []));
   const roots = tasks.filter((task) => !childIds.has(task.id));
   const [taskQuery, setTaskQuery] = useState("");
+
+  // Load services then tasks from the backend (fallback to mock when down).
+  useEffect(() => {
+    let cancelled = false;
+    let svcList = SERVICES;
+    getServices()
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) svcList = data;
+        if (!cancelled) setServices(svcList);
+        return getTasks();
+      })
+      .then((rawTasks) => {
+        if (cancelled) return;
+        if (Array.isArray(rawTasks) && rawTasks.length > 0) {
+          setTasks(normalizeTasks(rawTasks, svcList));
+          setTasksReal(true);
+        }
+      })
+      .catch(() => {
+        /* keep mock fallback when the API is unreachable */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Once connected to the backend, refresh the graph periodically so task
+  // status/progress (including rolled-up parent "group" tasks) update live.
+  useEffect(() => {
+    if (!tasksReal) return undefined;
+    let cancelled = false;
+    const id = setInterval(() => {
+      getTasks()
+        .then((rawTasks) => {
+          if (cancelled || !Array.isArray(rawTasks)) return;
+          setServices((svc) => {
+            setTasks(normalizeTasks(rawTasks, svc));
+            return svc;
+          });
+        })
+        .catch(() => {
+          /* ignore transient errors during polling */
+        });
+    }, 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [tasksReal]);
 
   const matchesTask = (task, q) =>
     task.id?.toLowerCase().includes(q) ||
@@ -335,39 +410,50 @@ export default function ServicesPage() {
     return roots.filter(matchTree);
   }, [roots, byId, taskQuery]);
 
-  const handleRevoke = (id) =>
+  const handleRevoke = async (id) => {
+    if (tasksReal) {
+      try {
+        const updated = await revokeTask(id);
+        setTasks((prev) =>
+          prev.map((task) =>
+            task.id === id ? { ...task, ...updated } : task
+          )
+        );
+        return;
+      } catch {
+        /* fall through to optimistic update */
+      }
+    }
     setTasks((prev) =>
       prev.map((task) =>
         task.id === id ? { ...task, status: "revoked", error: null } : task
       )
     );
+  };
 
-  const handleRetry = (id) =>
+  const handleRetry = async (id) => {
+    if (tasksReal) {
+      try {
+        const updated = await retryTask(id);
+        setTasks((prev) =>
+          prev.map((task) =>
+            task.id === id ? { ...task, ...updated } : task
+          )
+        );
+        return;
+      } catch {
+        /* fall through to optimistic update */
+      }
+    }
     setTasks((prev) =>
       prev.map((task) =>
         task.id === id ? { ...task, status: "running", error: null } : task
       )
     );
+  };
 
-  const [services, setServices] = useState(SERVICES);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    getServices()
-      .then((data) => {
-        if (!cancelled && Array.isArray(data) && data.length > 0) {
-          setServices(data);
-        }
-      })
-      .catch(() => {
-        /* keep mock fallback when the API is unreachable */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
