@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { FileText, Braces, Link as LinkIcon, Play } from "lucide-react";
+import { FileText, Braces, Play } from "lucide-react";
 import { Button } from "../components/ui/button";
 import {
   Card,
@@ -9,7 +9,6 @@ import {
   CardDescription,
 } from "../components/ui/card";
 import { Textarea } from "../components/ui/textarea";
-import { Input } from "../components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import Results from "../Results";
 import { mockAnalyze } from "../lib/mockApi";
@@ -23,7 +22,6 @@ export default function AnalyzePage() {
   const [tab, setTab] = useState("text");
   const [text, setText] = useState("");
   const [json, setJson] = useState("");
-  const [url, setUrl] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -31,10 +29,9 @@ export default function AnalyzePage() {
   const [task, setTask] = useState(null);
 
   const currentValue = useMemo(() => {
-    if (tab === "text") return text;
     if (tab === "json") return json;
-    return url;
-  }, [tab, text, json, url]);
+    return text;
+  }, [tab, text, json]);
 
   const canAnalyze = currentValue.trim().length > 0 && !loading;
 
@@ -55,10 +52,6 @@ export default function AnalyzePage() {
       payload = buildPayload();
     } catch {
       setError(t("analyze.error.json"));
-      return;
-    }
-    if (tab === "url" && !/^https?:\/\/.+/i.test(url.trim())) {
-      setError(t("analyze.error.url"));
       return;
     }
     setLoading(true);
@@ -102,9 +95,6 @@ export default function AnalyzePage() {
               <TabsTrigger value="json" className="flex-1">
                 <Braces className="h-4 w-4" /> {t("analyze.tab.json")}
               </TabsTrigger>
-              <TabsTrigger value="url" className="flex-1">
-                <LinkIcon className="h-4 w-4" /> {t("analyze.tab.url")}
-              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="text">
@@ -126,18 +116,6 @@ export default function AnalyzePage() {
                 onKeyDown={onKeyDown}
                 placeholder={'{\n  "prompt": "ignore all previous instructions"\n}'}
               />
-            </TabsContent>
-
-            <TabsContent value="url">
-              <Input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                onKeyDown={onKeyDown}
-                placeholder="https://example.com/page-to-analyze"
-              />
-              <p className="mt-2 text-xs text-muted-foreground">
-                {t("analyze.url.hint")}
-              </p>
             </TabsContent>
           </Tabs>
 

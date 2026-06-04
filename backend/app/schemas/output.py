@@ -129,10 +129,20 @@ class MaliciousCodeDetectionResult(DetectionResult):
     )
 
 
+class PageResult(BaseModel):
+    page_number: int | None = Field(
+        None,
+        description="Page number for multi-page documents (null for single-page inputs).",
+    )
+    detections: list[DetectionResult] = Field(
+        ..., description="List of detection results for this page."
+    )
+
+
 class Analyse(BaseModel):
     id: str = Field(..., description="Unique identifier of the analysis task.")
-    detections: list[DetectionResult] = Field(
-        ..., description="List of detection results from all applied detectors."
+    pages: list[PageResult] = Field(
+        ..., description="List of pages with their respective detection results."
     )
 
     error: str | None = Field(None, description="Error message if the analysis failed.")
