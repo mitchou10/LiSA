@@ -13,7 +13,10 @@ import { Input } from "../components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../components/ui/tabs";
 import Results from "../Results";
 import { mockAnalyze } from "../lib/mockApi";
+import { submitTask } from "../lib/api";
 import { useI18n } from "../lib/i18n.jsx";
+
+const USER_ID = "web-user";
 
 export default function AnalyzePage() {
   const { t } = useI18n();
@@ -25,6 +28,7 @@ export default function AnalyzePage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [task, setTask] = useState(null);
 
   const currentValue = useMemo(() => {
     if (tab === "text") return text;
@@ -45,6 +49,7 @@ export default function AnalyzePage() {
   const analyze = async () => {
     setError(null);
     setResult(null);
+    setTask(null);
     let payload;
     try {
       payload = buildPayload();
@@ -58,6 +63,13 @@ export default function AnalyzePage() {
     }
     setLoading(true);
     try {
+      // Create a real task on the backend.
+      const created = await submitTask({
+        userId: USER_ID,
+        inputData: { kind: tab, content: payload },
+      });
+      setTask(created);
+      // Fixed/mock scanner results for now.
       const res = await mockAnalyze(payload);
       setResult(res);
     } catch (err) {
@@ -148,6 +160,23 @@ export default function AnalyzePage() {
           <CardDescription>{t("analyze.results.desc")}</CardDescription>
         </CardHeader>
         <CardContent>
+          {task && (
+            <div className="mb-4 rounded-lg border border-border bg-background/40 p-3 text-xs">
+              <div className="mb-1 font-medium text-success">
+                {t("task.created")}
+              </div>
+              <div className="flex flex-col gap-0.5 text-muted-foreground">
+                <span>
+                  {t("task.id")} :{" "}
+                  <code className="text-foreground">{task.id}</code>
+                </span>
+                <span>
+                  {t("task.status")} :{" "}
+                  <code className="text-foreground">{task.status}</code>
+                </span>
+              </div>
+            </div>
+          )}
           <Results result={result} loading={loading} error={error} />
         </CardContent>
       </Card>

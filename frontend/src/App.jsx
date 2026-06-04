@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Shield, ScanSearch, Network, Languages } from "lucide-react";
 import { cn } from "./lib/utils";
 import { useI18n } from "./lib/i18n.jsx";
+import HealthIndicator from "./components/HealthIndicator";
 import AnalyzePage from "./pages/AnalyzePage";
 import ServicesPage from "./pages/ServicesPage";
 
@@ -60,6 +61,8 @@ export default function App() {
             <Languages className="h-4 w-4" />
             {lang === "en" ? "FR" : "EN"}
           </button>
+
+          <HealthIndicator />
         </div>
       </header>
 
