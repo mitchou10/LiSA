@@ -1,18 +1,18 @@
-import { useState } from "react";
 import { Shield, ScanSearch, Network, Languages } from "lucide-react";
+import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { cn } from "./lib/utils";
 import { useI18n } from "./lib/i18n.jsx";
 import HealthIndicator from "./components/HealthIndicator";
 import AnalyzePage from "./pages/AnalyzePage";
 import ServicesPage from "./pages/ServicesPage";
+import TaskDetailPage from "./pages/TaskDetailPage";
 
 const NAV = [
-  { id: "analyze", labelKey: "nav.analyze", icon: ScanSearch },
-  { id: "services", labelKey: "nav.services", icon: Network },
+  { to: "/analysis", labelKey: "nav.analyze", icon: ScanSearch },
+  { to: "/services", labelKey: "nav.services", icon: Network },
 ];
 
 export default function App() {
-  const [page, setPage] = useState("analyze");
   const { t, lang, setLanguage } = useI18n();
 
   return (
@@ -32,22 +32,22 @@ export default function App() {
           <nav className="ml-auto flex items-center gap-1 rounded-lg bg-muted p-1">
             {NAV.map((item) => {
               const Icon = item.icon;
-              const active = page === item.id;
               return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setPage(item.id)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
-                    active
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    cn(
+                      "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
+                      isActive
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )
+                  }
                 >
                   <Icon className="h-4 w-4" />
                   {t(item.labelKey)}
-                </button>
+                </NavLink>
               );
             })}
           </nav>
@@ -67,7 +67,13 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-7xl px-6 py-8">
-        {page === "analyze" ? <AnalyzePage /> : <ServicesPage />}
+        <Routes>
+          <Route path="/" element={<Navigate to="/analysis" replace />} />
+          <Route path="/analysis" element={<AnalyzePage />} />
+          <Route path="/analysis/:taskId" element={<TaskDetailPage />} />
+          <Route path="/services" element={<ServicesPage />} />
+          <Route path="*" element={<Navigate to="/analysis" replace />} />
+        </Routes>
       </main>
     </div>
   );

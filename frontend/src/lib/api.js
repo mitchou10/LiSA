@@ -45,4 +45,8 @@ export async function getTask(taskId) {
   return request(`/tasks/${taskId}`);
 }
 
+export async function getServices() {
+  return request("/services");
+}
+
 export { BASE_URL };

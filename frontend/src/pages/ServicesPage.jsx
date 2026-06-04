@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Server,
   CheckCircle2,
@@ -6,8 +8,12 @@ import {
   Circle,
   AlertTriangle,
   CornerDownRight,
-} from "lucide-react";
-import {
+  Search,
+  Ban,
+  RotateCcw,
+  ChevronRight,
+  Eye,
+} from "lucide-react";import {
   Card,
   CardContent,
   CardHeader,
@@ -15,8 +21,12 @@ import {
   CardDescription,
 } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Dialog } from "../components/ui/dialog";
 import { cn } from "../lib/utils";
 import { SERVICES, TASKS } from "../lib/mockData";
+import { getServices } from "../lib/api";
 import { useI18n } from "../lib/i18n.jsx";
 
 const STATUS = {
@@ -45,6 +55,12 @@ const STATUS = {
     icon: XCircle,
     color: "text-destructive",
   },
+  revoked: {
+    key: "status.revoked",
+    badge: "muted",
+    icon: Ban,
+    color: "text-muted-foreground",
+  },
 };
 
 function StatusIcon({ status }) {
@@ -55,9 +71,16 @@ function StatusIcon({ status }) {
   );
 }
 
-function TaskNode({ task, byId, depth }) {
+function TaskNode({ task, byId, depth, onRevoke, onRetry }) {
   const { t } = useI18n();
   const meta = STATUS[task.status] || STATUS.pending;
+  const canRevoke = task.status !== "success" && task.status !== "error";
+  const canRetry = task.status === "error";
+  const children = (task.children || [])
+    .map((childId) => byId[childId])
+    .filter(Boolean);
+  const hasChildren = children.length > 0;
+  const [open, setOpen] = useState(true);
   return (
     <div>
       <div
@@ -73,12 +96,34 @@ function TaskNode({ task, byId, depth }) {
           {depth > 0 && (
             <CornerDownRight className="h-4 w-4 text-muted-foreground" />
           )}
+          {hasChildren ? (
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              aria-label={open ? t("task.collapse") : t("task.expand")}
+            >
+              <ChevronRight
+                className={cn(
+                  "h-4 w-4 transition-transform",
+                  open && "rotate-90"
+                )}
+              />
+            </button>
+          ) : (
+            <span className="w-5" />
+          )}
           <StatusIcon status={task.status} />
           <span className="font-mono text-sm font-medium">{task.id}</span>
           <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
             {task.route}
           </code>
           <Badge variant="muted">{task.service}</Badge>
+          {hasChildren && (
+            <Badge variant="muted">
+              {t("task.subtasks").replace("{n}", children.length)}
+            </Badge>
+          )}
           <Badge variant={meta.badge} className="ml-auto">
             {t(meta.key)}
           </Badge>
@@ -89,82 +134,336 @@ function TaskNode({ task, byId, depth }) {
             <span>{task.error}</span>
           </div>
         )}
+        {(canRevoke || canRetry) && (
+          <div className="flex justify-end gap-2">
+            {canRetry && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onRetry(task.id)}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                {t("task.retry")}
+              </Button>
+            )}
+            {canRevoke && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onRevoke(task.id)}
+              >
+                <Ban className="h-3.5 w-3.5" />
+                {t("task.revoke")}
+              </Button>
+            )}
+          </div>
+        )}
+        {task.status === "success" && depth === 0 && (
+          <div className="flex justify-end">
+            <Link
+              to={`/analysis/${task.id}`}
+              className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-transparent px-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              {t("task.view")}
+            </Link>
+          </div>
+        )}
       </div>
 
-      {(task.children || []).map((childId) => {
-        const child = byId[childId];
-        if (!child) return null;
-        return (
-          <div key={childId} className="mt-2">
-            <TaskNode task={child} byId={byId} depth={depth + 1} />
+      {hasChildren &&
+        open &&
+        children.map((child) => (
+          <div key={child.id} className="mt-2">
+            <TaskNode
+              task={child}
+              byId={byId}
+              depth={depth + 1}
+              onRevoke={onRevoke}
+              onRetry={onRetry}
+            />
           </div>
-        );
-      })}
+        ))}
     </div>
+  );
+}
+
+const SERVICE_TYPE_VARIANT = {
+  guard: "default",
+  analyser: "success",
+  other: "muted",
+};
+
+function ServiceCard({ svc, onClick }) {
+  const { t } = useI18n();
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-start gap-3 rounded-lg border border-border bg-background/40 p-3 text-left transition-colors hover:bg-background/70"
+    >
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/15">
+        <Server className="h-4 w-4 text-primary" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-2 font-medium">
+            <span className="truncate">{svc.name}</span>
+            <code className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+              v{svc.version}
+            </code>
+          </span>
+          <Badge variant={SERVICE_TYPE_VARIANT[svc.type] ?? "muted"}>
+            {t(`service.type.${svc.type}`)}
+          </Badge>
+        </div>
+        {svc.description && (
+          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+            {svc.description}
+          </p>
+        )}
+        {svc.tags?.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {svc.tags.map((tag) => (
+              <Badge key={tag} variant="muted">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function SchemaBlock({ title, schema }) {
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {title}
+      </p>
+      <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-background/60 p-3 text-xs text-foreground">
+        {JSON.stringify(schema ?? {}, null, 2)}
+      </pre>
+    </div>
+  );
+}
+
+function ServiceDialog({ svc, open, onClose }) {
+  const { t } = useI18n();
+  if (!svc) return null;
+  return (
+    <Dialog open={open} onClose={onClose} title={svc.name} icon={Server}>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={SERVICE_TYPE_VARIANT[svc.type] ?? "muted"}>
+            {t(`service.type.${svc.type}`)}
+          </Badge>
+          <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            v{svc.version}
+          </code>
+        </div>
+
+        {svc.description && (
+          <p className="text-sm text-muted-foreground">{svc.description}</p>
+        )}
+
+        {svc.tags?.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {svc.tags.map((tag) => (
+              <Badge key={tag} variant="muted">
+                {tag}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        <SchemaBlock title={t("service.inputSchema")} schema={svc.input_schema} />
+        <SchemaBlock title={t("service.outputSchema")} schema={svc.output_schema} />
+
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-2">
+          <div className="flex items-baseline justify-between gap-2 border-b border-border/60 pb-1">
+            <dt className="text-muted-foreground">{t("service.id")}</dt>
+            <dd className="truncate text-right font-mono text-foreground">{svc.id}</dd>
+          </div>
+          {svc.created_at && (
+            <div className="flex items-baseline justify-between gap-2 border-b border-border/60 pb-1">
+              <dt className="text-muted-foreground">{t("service.created")}</dt>
+              <dd className="text-right text-foreground">
+                {new Date(svc.created_at).toLocaleString()}
+              </dd>
+            </div>
+          )}
+          {svc.updated_at && (
+            <div className="flex items-baseline justify-between gap-2 border-b border-border/60 pb-1">
+              <dt className="text-muted-foreground">{t("service.updated")}</dt>
+              <dd className="text-right text-foreground">
+                {new Date(svc.updated_at).toLocaleString()}
+              </dd>
+            </div>
+          )}
+        </dl>
+      </div>
+    </Dialog>
   );
 }
 
 export default function ServicesPage() {
   const { t } = useI18n();
-  const byId = Object.fromEntries(TASKS.map((t) => [t.id, t]));
-  const childIds = new Set(TASKS.flatMap((t) => t.children || []));
-  const roots = TASKS.filter((t) => !childIds.has(t.id));
+  const [tasks, setTasks] = useState(TASKS);
+  const byId = Object.fromEntries(tasks.map((task) => [task.id, task]));
+  const childIds = new Set(tasks.flatMap((task) => task.children || []));
+  const roots = tasks.filter((task) => !childIds.has(task.id));
+  const [taskQuery, setTaskQuery] = useState("");
+
+  const matchesTask = (task, q) =>
+    task.id?.toLowerCase().includes(q) ||
+    task.route?.toLowerCase().includes(q) ||
+    task.service?.toLowerCase().includes(q) ||
+    task.status?.toLowerCase().includes(q);
+
+  const filteredRoots = useMemo(() => {
+    const q = taskQuery.trim().toLowerCase();
+    if (!q) return roots;
+    const matchTree = (task) => {
+      if (matchesTask(task, q)) return true;
+      return (task.children || []).some((cid) => {
+        const child = byId[cid];
+        return child && matchTree(child);
+      });
+    };
+    return roots.filter(matchTree);
+  }, [roots, byId, taskQuery]);
+
+  const handleRevoke = (id) =>
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === id ? { ...task, status: "revoked", error: null } : task
+      )
+    );
+
+  const handleRetry = (id) =>
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === id ? { ...task, status: "running", error: null } : task
+      )
+    );
+
+  const [services, setServices] = useState(SERVICES);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getServices()
+      .then((data) => {
+        if (!cancelled && Array.isArray(data) && data.length > 0) {
+          setServices(data);
+        }
+      })
+      .catch(() => {
+        /* keep mock fallback when the API is unreachable */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return services;
+    return services.filter(
+      (s) =>
+        s.name?.toLowerCase().includes(q) ||
+        s.type?.toLowerCase().includes(q) ||
+        (s.tags || []).some((tag) => tag.toLowerCase().includes(q))
+    );
+  }, [services, query]);
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+    <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
       {/* Services */}
       <Card className="h-fit">
         <CardHeader>
-          <CardTitle>{t("services.title")}</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            {t("services.title")}
+            <Badge variant="muted">{services.length}</Badge>
+          </CardTitle>
           <CardDescription>{t("services.desc")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {SERVICES.map((svc) => (
-            <div
-              key={svc.name}
-              className="flex items-start gap-3 rounded-lg border border-border bg-background/40 p-3"
-            >
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/15">
-                <Server className="h-4 w-4 text-primary" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{svc.name}</span>
-                  <Badge
-                    variant={
-                      svc.status === "online"
-                        ? "success"
-                        : svc.status === "degraded"
-                          ? "default"
-                          : "destructive"
-                    }
-                  >
-                    {svc.status}
-                  </Badge>
-                </div>
-                <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                  <div>{t("services.in")} : {svc.in_queue}</div>
-                  <div>{t("services.out")} : {svc.out_queue}</div>
-                  <div>{t("services.quota")} : {svc.quotas}</div>
-                </div>
-              </div>
-            </div>
-          ))}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={t("services.search")}
+              className="pl-9"
+            />
+          </div>
+          <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto pr-1">
+            {filtered.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {t("services.empty")}
+              </p>
+            ) : (
+              filtered.map((svc) => (
+                <ServiceCard
+                  key={svc.id}
+                  svc={svc}
+                  onClick={() => setSelected(svc)}
+                />
+              ))
+            )}
+          </div>
         </CardContent>
       </Card>
 
       {/* Tasks / execution graph */}
       <Card>
         <CardHeader>
-          <CardTitle>{t("graph.title")}</CardTitle>
+          <CardTitle className="flex items-center justify-between">
+            {t("graph.title")}
+            <Badge variant="muted">{tasks.length}</Badge>
+          </CardTitle>
           <CardDescription>{t("graph.desc")}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          {roots.map((root) => (
-            <TaskNode key={root.id} task={root} byId={byId} depth={0} />
-          ))}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={taskQuery}
+              onChange={(e) => setTaskQuery(e.target.value)}
+              placeholder={t("graph.search")}
+              className="pl-9"
+            />
+          </div>
+          <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto pr-1">
+            {filteredRoots.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {t("graph.empty")}
+              </p>
+            ) : (
+              filteredRoots.map((root) => (
+                <TaskNode
+                  key={root.id}
+                  task={root}
+                  byId={byId}
+                  depth={0}
+                  onRevoke={handleRevoke}
+                  onRetry={handleRetry}
+                />
+              ))
+            )}
+          </div>
         </CardContent>
       </Card>
+
+      <ServiceDialog
+        svc={selected}
+        open={Boolean(selected)}
+        onClose={() => setSelected(null)}
+      />
     </div>
   );
 }
