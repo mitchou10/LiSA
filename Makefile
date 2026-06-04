@@ -1,3 +1,6 @@
+
+lint: 
+	echo "Running ruff..."
 build-guard:
 	@echo "Building LISA Guard Docker image..."
 	docker build -t lisa-guard:latest --target=guard .
