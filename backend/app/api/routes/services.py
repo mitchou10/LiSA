@@ -19,10 +19,11 @@ async def create_service(
 @router.get("", response_model=list[ServiceRead])
 async def list_services(
     service: ServiceServiceDep,
+    name: str | None = Query(default=None, description="Filter by exact service name."),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[ServiceRead]:
-    objs = await service.list(limit=limit, offset=offset)
+    objs = await service.list(name=name, limit=limit, offset=offset)
     return [ServiceRead.model_validate(o) for o in objs]
 
 

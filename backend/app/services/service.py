@@ -32,7 +32,12 @@ class ServiceService:
             raise NotFoundError(f"Service {service_id} not found.")
         return service
 
-    async def list(self, *, limit: int = 100, offset: int = 0) -> list[Service]:
+    async def list(
+        self, *, name: str | None = None, limit: int = 100, offset: int = 0
+    ) -> list[Service]:
+        if name is not None:
+            service = await self.repo.get_by_name(name)
+            return [service] if service is not None else []
         return await self.repo.list(limit=limit, offset=offset)
 
     async def update(self, service_id: UUID, data: ServiceUpdate) -> Service:
