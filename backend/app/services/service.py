@@ -1,0 +1,49 @@
+from __future__ import annotations
+
+from uuid import UUID
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.service import Service
+from app.repositories.service import ServiceRepository
+from app.schemas.service import ServiceCreate, ServiceUpdate
+from app.services.exceptions import ConflictError, NotFoundError
+
+
+class ServiceService:
+    """Business logic for managing services."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+        self.repo = ServiceRepository(session)
+
+    async def create(self, data: ServiceCreate) -> Service:
+        existing = await self.repo.get_by_name(data.name)
+        if existing is not None:
+            raise ConflictError(f"Service '{data.name}' already exists.")
+        service = Service(**data.model_dump())
+        service = await self.repo.add(service)
+        await self.session.commit()
+        return service
+
+    async def get(self, service_id: UUID) -> Service:
+        service = await self.repo.get(service_id)
+        if service is None:
+            raise NotFoundError(f"Service {service_id} not found.")
+        return service
+
+    async def list(self, *, limit: int = 100, offset: int = 0) -> list[Service]:
+        return await self.repo.list(limit=limit, offset=offset)
+
+    async def update(self, service_id: UUID, data: ServiceUpdate) -> Service:
+        service = await self.get(service_id)
+        for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(service, field, value)
+        await self.session.commit()
+        await self.session.refresh(service)
+        return service
+
+    async def delete(self, service_id: UUID) -> None:
+        service = await self.get(service_id)
+        await self.repo.delete(service)
+        await self.session.commit()
