@@ -3,16 +3,16 @@ name: CI
 on:
   pull_request:
     types:
-    - opened
-    - reopened
-    - synchronize
-    - ready_for_review
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
     branches:
-    - "**"
+      - "**"
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: 3.x
+  PYTHON_VERSION: "3.13"
 
 jobs:
   expose-vars:
@@ -21,20 +21,20 @@ jobs:
     outputs:
       PYTHON_VERSION: ${{ env.PYTHON_VERSION }}
     steps:
-    - name: Exposing env vars
-      run: echo "Exposing env vars"
+      - name: Exposing env vars
+        run: echo "Exposing env vars"
 
   lint:
     uses: ./.github/workflows/lint.yml
     needs:
-    - expose-vars
+      - expose-vars
     with:
       PYTHON_VERSION: ${{ needs.expose-vars.outputs.PYTHON_VERSION }}
 
   unit-tests:
     uses: ./.github/workflows/unit-tests.yml
     needs:
-    - expose-vars
+      - expose-vars
     with:
       PYTHON_VERSION: ${{ needs.expose-vars.outputs.PYTHON_VERSION }}
 
@@ -44,21 +44,21 @@ jobs:
     runs-on: ubuntu-24.04
     if: ${{ always() }}
     needs:
-    - expose-vars
-    - lint
-    - unit-tests
+      - expose-vars
+      - lint
+      - unit-tests
     steps:
-    - name: Check status of all required jobs
-      run: |-
-        NEEDS_CONTEXT='${{ toJson(needs) }}'
-        JOB_IDS=$(echo "$NEEDS_CONTEXT" | jq -r 'keys[]')
-        for JOB_ID in $JOB_IDS; do
-          RESULT=$(echo "$NEEDS_CONTEXT" | jq -r ".[\"$JOB_ID\"].result")
-          echo "$JOB_ID job result: $RESULT"
-          if [[ $RESULT != "success" && $RESULT != "skipped" ]]; then
-            echo "***"
-            echo "Error: The $JOB_ID job did not pass."
-            exit 1
-          fi
-        done
-        echo "All jobs passed or were skipped."
+      - name: Check status of all required jobs
+        run: |-
+          NEEDS_CONTEXT='${{ toJson(needs) }}'
+          JOB_IDS=$(echo "$NEEDS_CONTEXT" | jq -r 'keys[]')
+          for JOB_ID in $JOB_IDS; do
+            RESULT=$(echo "$NEEDS_CONTEXT" | jq -r ".[\"$JOB_ID\"].result")
+            echo "$JOB_ID job result: $RESULT"
+            if [[ $RESULT != "success" && $RESULT != "skipped" ]]; then
+              echo "***"
+              echo "Error: The $JOB_ID job did not pass."
+              exit 1
+            fi
+          done
+          echo "All jobs passed or were skipped."

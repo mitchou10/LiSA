@@ -13,22 +13,24 @@ on:
         description: Python version used to run tests
         required: true
         type: string
-        default: 3.X
+        default: "3.13"
 
 jobs:
-  tests:
+  lint:
     name: Lint code
     runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ inputs.PYTHON_VERSION }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
 
-    - name: Run lint
-      run: make lint
+      - name: Run lint
+        run: make lint

@@ -2,8 +2,6 @@ import os
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 
-import asyncio
-
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -137,11 +135,3 @@ async def test_dashboard_analytics(client: AsyncClient):
     # Scoping to another user yields no data.
     resp = await client.get("/api/v1/analytics/dashboard?user_id=bob")
     assert resp.json()["total_tasks"] == 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(asyncio.run(_noop()))  # pragma: no cover
-
-
-async def _noop():  # pragma: no cover
-    return 0
