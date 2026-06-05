@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -86,4 +87,21 @@ class TaskRepository(BaseRepository[Task]):
         result = await self.session.execute(
             select(Task).where(Task.parent_task_id == parent_task_id)
         )
+        return list(result.scalars().all())
+
+    async def list_since(
+        self,
+        *,
+        since: datetime,
+        user_id: str | None = None,
+    ) -> list[Task]:
+        """Return tasks created at/after ``since``, oldest first.
+
+        Used by the analytics dashboard to aggregate detections over time.
+        """
+        stmt = select(Task).where(Task.created_at >= since)
+        if user_id is not None:
+            stmt = stmt.where(Task.user_id == user_id)
+        stmt = stmt.order_by(Task.created_at.asc())
+        result = await self.session.execute(stmt)
         return list(result.scalars().all())

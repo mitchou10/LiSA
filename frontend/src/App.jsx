@@ -1,4 +1,4 @@
-import { Shield, ScanSearch, Network, Languages } from "lucide-react";
+import { Shield, ScanSearch, Network, Languages, LayoutDashboard } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { cn } from "./lib/utils";
 import { useI18n } from "./lib/i18n.jsx";
@@ -6,9 +6,11 @@ import HealthIndicator from "./components/HealthIndicator";
 import AnalyzePage from "./pages/AnalyzePage";
 import ServicesPage from "./pages/ServicesPage";
 import TaskDetailPage from "./pages/TaskDetailPage";
+import DashboardPage from "./pages/DashboardPage";
 
 const NAV = [
   { to: "/analysis", labelKey: "nav.analyze", icon: ScanSearch },
+  { to: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
   { to: "/services", labelKey: "nav.services", icon: Network },
 ];
 
@@ -71,6 +73,7 @@ export default function App() {
           <Route path="/" element={<Navigate to="/analysis" replace />} />
           <Route path="/analysis" element={<AnalyzePage />} />
           <Route path="/analysis/:taskId" element={<TaskDetailPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/services" element={<ServicesPage />} />
           <Route path="*" element={<Navigate to="/analysis" replace />} />
         </Routes>

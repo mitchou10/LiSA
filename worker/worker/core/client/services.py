@@ -1,7 +1,5 @@
 """Client for the ``/api/v1/services`` routes."""
 
-from __future__ import annotations
-
 from typing import Any
 
 from worker.core.client.base import BaseClient

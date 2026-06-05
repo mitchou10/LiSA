@@ -137,4 +137,10 @@ export async function getServices(params = {}) {
   return Array.isArray(page) ? page : (page?.items ?? []);
 }
 
+// Aggregated analytics for the monitoring dashboard.
+export async function getDashboardStats({ userId, days = 30 } = {}) {
+  const query = buildQuery({ user_id: userId, days });
+  return request(`/analytics/dashboard${query}`);
+}
+
 export { BASE_URL };

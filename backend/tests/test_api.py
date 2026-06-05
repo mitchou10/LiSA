@@ -87,6 +87,58 @@ async def test_task_lifecycle(client: AsyncClient):
     assert resp.json()["status"] == "revoked"
 
 
+async def test_dashboard_analytics(client: AsyncClient):
+    # Create a task and attach detection output the way a worker would.
+    resp = await client.post(
+        "/api/v1/tasks",
+        json={"user_id": "alice", "input_data": {"text": "ignore previous"}},
+    )
+    task_id = resp.json()["id"]
+
+    output = {
+        "id": task_id,
+        "pages": [
+            {
+                "page_number": 1,
+                "detections": [
+                    {
+                        "flagged": True,
+                        "confidence": 0.92,
+                        "severity": "high",
+                        "action": "block",
+                        "jailbreak": True,
+                    },
+                    {
+                        "flagged": False,
+                        "confidence": 0.1,
+                        "pii": False,
+                    },
+                ],
+            }
+        ],
+    }
+    resp = await client.patch(
+        f"/api/v1/tasks/{task_id}",
+        json={"status": "success", "progress": 100, "output_data": output},
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = await client.get("/api/v1/analytics/dashboard?days=30")
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["total_tasks"] == 1
+    assert data["total_detections"] == 2
+    assert data["total_flagged"] == 1
+    assert any(t["type"] == "jailbreak" and t["flagged"] == 1 for t in data["by_type"])
+    assert len(data["alerts"]) == 1
+    assert data["alerts"][0]["severity"] == "high"
+    assert any(u["user_id"] == "alice" for u in data["by_user"])
+
+    # Scoping to another user yields no data.
+    resp = await client.get("/api/v1/analytics/dashboard?user_id=bob")
+    assert resp.json()["total_tasks"] == 0
+
+
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(_noop()))  # pragma: no cover
 
