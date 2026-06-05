@@ -1,26 +1,92 @@
-
 services:
-  consumer:
-    image: lisa-consumer:v0.1.0
-    container_name: lisa-consumer
+  db:
+    image: postgres:16-alpine
+    container_name: lisa-db
+    environment:
+      POSTGRES_USER: lisa
+      POSTGRES_PASSWORD: lisa
+      POSTGRES_DB: lisa
     volumes:
-      - ./apps/server/worker:/app/worker
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lisa -d lisa"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lisa
+
+  server:
+    image: lisa-server:v0.1.0
+    container_name: lisa-server
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+asyncpg://lisa:lisa@db:5432/lisa
+      CORS_ORIGINS: '["*"]'
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - lisa
+
+  redis:
+    image: redis:7-alpine
+    container_name: lisa-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - lisa
+
+  anonymize:
+    image: lisa-service-anonymize:v0.1.0
+    container_name: lisa-anonymize
     build:
       context: .
-      dockerfile: Dockerfile
-      target: guard
-    env_file:
-      -  ${PWD}/.env.example
+      dockerfile: services/anonymize/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LISA_API_URL: http://server:8000
+    depends_on:
+      redis:
+        condition: service_healthy
+      server:
+        condition: service_started
     networks:
-      - async-api_default
+      - lisa
+
+  frontend:
+    image: lisa-frontend:v0.1.0
+    container_name: lisa-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "8080:80"
+    depends_on:
+      - server
+    networks:
+      - lisa
+
 volumes:
   db-data:
     driver: local
-  broker-lib:
-    driver: local
-  broker-log:
-    driver: local
 
 networks:
-  async-api_default:
-    external: true
+  lisa:
+    driver: bridge

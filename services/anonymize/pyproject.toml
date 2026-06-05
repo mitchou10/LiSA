@@ -1,0 +1,27 @@
+[project]
+name = "lisa-service-anonymize"
+version = "0.1.0"
+description = "LiSA worker service: PII anonymization via llm-guard's Anonymize scanner, exposed as a Celery task."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "celery[redis]>=5.4",
+    "llm-guard>=0.3.16",
+    "lisa-worker",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# For local development, resolve the worker package from the sibling folder.
+[tool.uv.sources]
+lisa-worker = { path = "../../worker", editable = true }
