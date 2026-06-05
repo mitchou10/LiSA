@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/mitchou10/LiSA/compare/v0.4.0...v0.5.0) (2026-06-05)
+
+
+### Features
+
+* add support for configurable Celery queues in service and task dispatching ([3d87fca](https://github.com/mitchou10/LiSA/commit/3d87fcabc2694ecec59b446c4e4bc5468d3aca6a))
+
 ## [0.4.0](https://github.com/mitchou10/LiSA/compare/v0.3.0...v0.4.0) (2026-06-05)
 
 
