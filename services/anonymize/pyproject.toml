@@ -1,6 +1,6 @@
 [project]
 name = "lisa-service-anonymize"
-version = "0.1.0"
+version = "0.4.0"
 description = "LiSA worker service: PII anonymization via llm-guard's Anonymize scanner, exposed as a Celery task."
 readme = "README.md"
 requires-python = ">=3.11,<3.13"

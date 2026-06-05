@@ -1,0 +1,172 @@
+# Default values for the LiSA umbrella chart.
+# This chart is self-contained (bundled Postgres + Redis) so it can be
+# installed offline on a local cluster (kind / minikube / k3d) for testing.
+# For real production, set postgres.enabled / redis.enabled to false and point
+# the backend at managed services via the *.externalUrl values.
+
+global:
+  imagePullPolicy: IfNotPresent
+  # Shared image tag, overridable per component below.
+  imageTag: "v0.4.0"
+
+# ---------------------------------------------------------------------------
+# Application secrets. CHANGE THESE before any real deployment.
+# In production prefer an external Secret / Vault / External-Secrets operator
+# and set createSecret: false + existingSecret: <name>.
+# ---------------------------------------------------------------------------
+secrets:
+  createSecret: true
+  existingSecret: ""
+  jwtSecret: "change-me-in-production-with-a-long-random-secret"
+  serviceToken: "change-me-service-token"
+  adminUsername: "admin"
+  adminPassword: "admin"
+
+# ---------------------------------------------------------------------------
+# Backend (FastAPI)
+# ---------------------------------------------------------------------------
+backend:
+  image:
+    repository: lisa-server
+    tag: ""           # falls back to global.imageTag
+    pullPolicy: ""    # falls back to global.imagePullPolicy
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 8000
+  env:
+    authProvider: local
+    corsOrigins: '["*"]'
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+# ---------------------------------------------------------------------------
+# Frontend (nginx serving the built SPA)
+# ---------------------------------------------------------------------------
+frontend:
+  image:
+    repository: lisa-frontend
+    tag: ""
+    pullPolicy: ""
+  replicaCount: 1
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# ---------------------------------------------------------------------------
+# Workers (Celery). One list entry == one independent worker Deployment.
+# Add as many as you have services; no template changes required.
+#
+# Per worker:
+#   name         : short id, used for the Deployment/pod names (lisa-worker-<name>)
+#   enabled      : toggle this worker on/off
+#   image        : container image (repository/tag/pullPolicy)
+#   replicaCount : horizontal scaling (all replicas share the same queue)
+#   queueName    : Celery queue this worker consumes from (must match the
+#                  service's queue registered on the backend)
+#   resources    : CPU/memory requests & limits (ML models are memory-hungry)
+# ---------------------------------------------------------------------------
+workers:
+  - name: anonymize
+    enabled: true
+    image:
+      repository: lisa-service-anonymize
+      tag: ""           # falls back to global.imageTag
+      pullPolicy: ""    # falls back to global.imagePullPolicy
+    replicaCount: 1
+    queueName: "llm-guard-anonymize"
+    resources:
+      requests:
+        cpu: "1"
+        memory: 2Gi
+      limits:
+        cpu: "2"
+        memory: 4Gi
+
+  # Example: add another worker by uncommenting and adjusting the values.
+  # - name: jailbreak
+  #   enabled: true
+  #   image:
+  #     repository: lisa-service-jailbreak
+  #     tag: ""
+  #     pullPolicy: ""
+  #   replicaCount: 2
+  #   queueName: "llm-guard-jailbreak"
+  #   resources:
+  #     requests:
+  #       cpu: "1"
+  #       memory: 2Gi
+  #     limits:
+  #       cpu: "2"
+  #       memory: 4Gi
+
+# ---------------------------------------------------------------------------
+# Bundled Postgres (dev/local). Disable and use externalUrl in production.
+# ---------------------------------------------------------------------------
+postgres:
+  enabled: true
+  externalUrl: ""   # e.g. postgresql+asyncpg://user:pass@host:5432/lisa
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  auth:
+    username: lisa
+    password: lisa
+    database: lisa
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+# ---------------------------------------------------------------------------
+# Bundled Redis (dev/local broker). Disable and use externalUrl in production.
+# ---------------------------------------------------------------------------
+redis:
+  enabled: true
+  externalUrl: ""   # e.g. redis://host:6379/0
+  image:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+  service:
+    port: 6379
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# ---------------------------------------------------------------------------
+# Ingress (optional). For local testing, port-forward is usually enough.
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: lisa.local
+  # The SPA is served at "/" and the API is proxied at "/api" + "/health".
+  tls: []

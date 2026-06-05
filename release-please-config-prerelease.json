@@ -3,10 +3,42 @@
   "packages": {
     ".": {
       "release-type": "simple",
-      "package-name": "src",
+      "package-name": "lisa",
       "include-component-in-tag": false,
       "prerelease": true,
-      "prerelease-type": "rc"
+      "prerelease-type": "rc",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "frontend/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "toml",
+          "path": "backend/pyproject.toml",
+          "jsonpath": "project.version"
+        },
+        {
+          "type": "toml",
+          "path": "worker/pyproject.toml",
+          "jsonpath": "project.version"
+        },
+        {
+          "type": "toml",
+          "path": "services/anonymize/pyproject.toml",
+          "jsonpath": "project.version"
+        },
+        {
+          "type": "yaml",
+          "path": "deploy/helm/lisa/Chart.yaml",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "yaml",
+          "path": "deploy/helm/lisa/Chart.yaml",
+          "jsonpath": "$.appVersion"
+        }
+      ]
     }
   }
 }

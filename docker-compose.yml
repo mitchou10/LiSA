@@ -19,7 +19,7 @@ services:
       - lisa
 
   server:
-    image: lisa-server:v0.1.0
+    image: lisa-server:v0.4.0
     container_name: lisa-server
     build:
       context: ./backend
@@ -62,7 +62,7 @@ services:
       - lisa
 
   anonymize:
-    image: lisa-service-anonymize:v0.1.0
+    image: lisa-service-anonymize:v0.4.0
     container_name: lisa-anonymize
     build:
       context: .
@@ -81,7 +81,7 @@ services:
       - lisa
 
   frontend:
-    image: lisa-frontend:v0.1.0
+    image: lisa-frontend:v0.4.0
     container_name: lisa-frontend
     build:
       context: ./frontend

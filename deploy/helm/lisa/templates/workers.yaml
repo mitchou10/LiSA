@@ -1,0 +1,50 @@
+{{- $fullname := include "lisa.fullname" . }}
+{{- range .Values.workers }}
+{{- if .enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $fullname }}-worker-{{ .name }}
+  labels:
+    {{- include "lisa.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: worker-{{ .name }}
+spec:
+  replicas: {{ .replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "lisa.selectorLabels" (dict "ctx" $ "component" (printf "worker-%s" .name)) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "lisa.selectorLabels" (dict "ctx" $ "component" (printf "worker-%s" .name)) | nindent 8 }}
+    spec:
+      containers:
+        - name: worker-{{ .name }}
+          image: {{ include "lisa.image" (dict "image" .image "global" $.Values.global) | quote }}
+          imagePullPolicy: {{ .image.pullPolicy | default $.Values.global.imagePullPolicy }}
+          env:
+            - name: REDIS_URL
+              value: {{ include "lisa.redisUrl" $ | quote }}
+            - name: CELERY_QUEUE
+              value: {{ .queueName | quote }}
+            - name: LISA_API_URL
+              value: {{ printf "http://%s-backend:%v" $fullname ($.Values.backend.service.port | int) | quote }}
+            - name: LISA_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "lisa.secretName" $ }}
+                  key: SERVICE_TOKEN
+          # The Celery worker has no HTTP port; use a liveness exec on the
+          # broker ping so a crash-looped pod is restarted.
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "celery -A app.celery_app.celery_app inspect ping -d celery@$HOSTNAME"]
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 15
+            failureThreshold: 3
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+{{- end }}
+{{- end }}
