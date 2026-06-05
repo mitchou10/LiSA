@@ -6,6 +6,7 @@ from app.services.exceptions import (
 )
 from app.services.service import ServiceService
 from app.services.task import TaskService
+from app.services.user import UserService
 
 __all__ = [
     "AnalyticsService",
@@ -14,4 +15,5 @@ __all__ = [
     "NotFoundError",
     "ServiceService",
     "TaskService",
+    "UserService",
 ]
