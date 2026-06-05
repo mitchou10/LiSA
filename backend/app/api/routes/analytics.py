@@ -1,4 +1,4 @@
-from app.api.deps import AnalyticsServiceDep
+from app.api.deps import AnalyticsServiceDep, CurrentUserDep
 from app.schemas.analytics import DashboardStats
 
 from fastapi import APIRouter, Query
@@ -9,6 +9,7 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 @router.get("/dashboard", response_model=DashboardStats)
 async def get_dashboard(
     service: AnalyticsServiceDep,
+    _user: CurrentUserDep,
     user_id: str | None = Query(
         default=None, description="Scope stats to a single user."
     ),

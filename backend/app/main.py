@@ -6,19 +6,33 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import api_router, health
 from app.config import get_settings
-from app.database import init_db
+from app.database import async_session_factory, init_db
 from app.services.exceptions import (
     ConflictError,
     InvalidStateError,
     NotFoundError,
 )
+from app.services.user import UserService
 
 settings = get_settings()
+
+
+async def _seed_admin() -> None:
+    """Create the default admin account on startup (local auth only)."""
+    if settings.auth_provider != "local":
+        return
+    async with async_session_factory() as session:
+        await UserService(session).ensure_admin(
+            settings.admin_username,
+            settings.admin_password,
+            settings.admin_email,
+        )
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     await init_db()
+    await _seed_admin()
     yield
 
 

@@ -40,6 +40,7 @@ class BaseClient:
             base_url or os.getenv("LISA_API_URL", DEFAULT_BASE_URL)
         ).rstrip("/")
         self.api_prefix = api_prefix.rstrip("/")
+        self._service_token = os.getenv("LISA_SERVICE_TOKEN")
         self._owns_client = client is None
         self._client = client or httpx.Client(timeout=timeout)
 
@@ -70,11 +71,17 @@ class BaseClient:
         json: Any | None = None,
     ) -> Any:
         url = self._url(path, prefixed=prefixed)
+        headers = (
+            {"Authorization": f"Bearer {self._service_token}"}
+            if self._service_token
+            else None
+        )
         response = self._client.request(
             method,
             url,
             params={k: v for k, v in (params or {}).items() if v is not None},
             json=json,
+            headers=headers,
         )
         if response.status_code >= 400:
             try:

@@ -5,10 +5,30 @@ const BASE_URL = (
 
 const API_V1 = `${BASE_URL}/api/v1`;
 
+const TOKEN_KEY = "lisa_token";
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token) {
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
+
+export function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
 async function request(path, options = {}) {
+  const token = getToken();
   const res = await fetch(`${API_V1}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers || {}),
+    },
   });
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
@@ -18,7 +38,9 @@ async function request(path, options = {}) {
     } catch {
       /* ignore non-JSON error bodies */
     }
-    throw new Error(detail);
+    const error = new Error(detail);
+    error.status = res.status;
+    throw error;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -28,6 +50,24 @@ export async function getHealth() {
   const res = await fetch(`${BASE_URL}/health`);
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
+}
+
+// Authentication ----------------------------------------------------------
+export async function login({ username, password }) {
+  const data = await request("/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+  setToken(data.access_token);
+  return data;
+}
+
+export async function getMe() {
+  return request("/auth/me");
+}
+
+export function logout() {
+  clearToken();
 }
 
 export async function submitTask({

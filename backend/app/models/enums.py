@@ -17,3 +17,10 @@ class ServiceType(str, enum.Enum):
     GUARD = "guard"
     ANALYSER = "analyser"
     OTHER = "other"
+
+
+class UserRole(str, enum.Enum):
+    """Access level of a user account."""
+
+    ADMIN = "admin"
+    USER = "user"

@@ -28,6 +28,16 @@ services:
       DATABASE_URL: postgresql+asyncpg://lisa:lisa@db:5432/lisa
       CORS_ORIGINS: '["*"]'
       REDIS_URL: redis://redis:6379/0
+      AUTH_PROVIDER: ${AUTH_PROVIDER:-local}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-with-a-long-random-secret}
+      SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-service-token}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      KEYCLOAK_SERVER_URL: ${KEYCLOAK_SERVER_URL:-}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-}
+      KEYCLOAK_ADMIN_ROLE: ${KEYCLOAK_ADMIN_ROLE:-admin}
     ports:
       - "8000:8000"
     depends_on:
@@ -60,6 +70,7 @@ services:
     environment:
       REDIS_URL: redis://redis:6379/0
       LISA_API_URL: http://server:8000
+      LISA_SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-service-token}
     depends_on:
       redis:
         condition: service_healthy

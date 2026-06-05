@@ -1,12 +1,23 @@
-import { Shield, ScanSearch, Network, Languages, LayoutDashboard } from "lucide-react";
+import {
+  Shield,
+  ScanSearch,
+  Network,
+  Languages,
+  LayoutDashboard,
+  LogIn,
+} from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { cn } from "./lib/utils";
 import { useI18n } from "./lib/i18n.jsx";
+import { useAuth } from "./lib/auth.jsx";
 import HealthIndicator from "./components/HealthIndicator";
+import UserMenu from "./components/UserMenu";
+import ProtectedRoute from "./components/ProtectedRoute";
 import AnalyzePage from "./pages/AnalyzePage";
 import ServicesPage from "./pages/ServicesPage";
 import TaskDetailPage from "./pages/TaskDetailPage";
 import DashboardPage from "./pages/DashboardPage";
+import LoginPage from "./pages/LoginPage";
 
 const NAV = [
   { to: "/analysis", labelKey: "nav.analyze", icon: ScanSearch },
@@ -16,6 +27,10 @@ const NAV = [
 
 export default function App() {
   const { t, lang, setLanguage } = useI18n();
+  const { isAuthenticated } = useAuth();
+
+  // Everything is gated behind login: only show the nav once authenticated.
+  const navItems = isAuthenticated ? NAV : [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -32,7 +47,7 @@ export default function App() {
           </div>
 
           <nav className="ml-auto flex items-center gap-1 rounded-lg bg-muted p-1">
-            {NAV.map((item) => {
+            {navItems.map((item) => {
               const Icon = item.icon;
               return (
                 <NavLink
@@ -64,6 +79,18 @@ export default function App() {
             {lang === "en" ? "FR" : "EN"}
           </button>
 
+          {isAuthenticated ? (
+            <UserMenu />
+          ) : (
+            <NavLink
+              to="/login"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <LogIn className="h-4 w-4" />
+              {t("auth.login")}
+            </NavLink>
+          )}
+
           <HealthIndicator />
         </div>
       </header>
@@ -71,10 +98,39 @@ export default function App() {
       <main className="mx-auto max-w-7xl px-6 py-8">
         <Routes>
           <Route path="/" element={<Navigate to="/analysis" replace />} />
-          <Route path="/analysis" element={<AnalyzePage />} />
-          <Route path="/analysis/:taskId" element={<TaskDetailPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/services" element={<ServicesPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            path="/analysis"
+            element={
+              <ProtectedRoute>
+                <AnalyzePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/analysis/:taskId"
+            element={
+              <ProtectedRoute>
+                <TaskDetailPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/services"
+            element={
+              <ProtectedRoute>
+                <ServicesPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="*" element={<Navigate to="/analysis" replace />} />
         </Routes>
       </main>
