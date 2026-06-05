@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/mitchou10/LiSA/compare/v0.4.0...v0.5.0) (2026-06-05)
+
+
+### Features
+
+* add support for configurable Celery queues in service and task dispatching ([3d87fca](https://github.com/mitchou10/LiSA/commit/3d87fcabc2694ecec59b446c4e4bc5468d3aca6a))
+* update version to 0.4.0 across all components and add Helm chart files ([3342f5c](https://github.com/mitchou10/LiSA/commit/3342f5c055f8013be37fb34422d80c6f238cf76c))
+
 ## [0.4.0](https://github.com/mitchou10/LiSA/compare/v0.3.0...v0.4.0) (2026-06-05)
 
 
