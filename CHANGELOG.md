@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/mitchou10/LiSA/compare/v0.3.0...v0.4.0) (2026-06-05)
+
+
+### Features
+
+* implement local JWT authentication and Keycloak integration ([a853b9c](https://github.com/mitchou10/LiSA/commit/a853b9cc633dccf105c25db4bd4b45b3e45566c1))
+
 ## [0.3.0](https://github.com/mitchou10/LiSA/compare/v0.2.0...v0.3.0) (2026-06-05)
 
 
