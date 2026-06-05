@@ -82,6 +82,7 @@ class AnonymizeService(BaseService):
     description = "Redacts PII (names, emails, cards, IBAN, SSN, ...) from prompts using llm-guard's Anonymize scanner."
     tags = ["llm-guard", "pii", "anonymize", "input"]
     type = "guard"
+    queue = config.CELERY_QUEUE
     input_schema = INPUT_SCHEMA
     output_schema = OUTPUT_SCHEMA
 

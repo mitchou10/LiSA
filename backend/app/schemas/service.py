@@ -10,6 +10,11 @@ class ServiceBase(BaseModel):
     name: str = Field(..., max_length=255)
     version: str = Field(default="0.1.0", max_length=50)
     description: str | None = None
+    queue: str | None = Field(
+        default=None,
+        max_length=255,
+        description="Celery queue the worker consumes from (defaults to the service name).",
+    )
     tags: list[str] = Field(default_factory=list)
     type: ServiceType = ServiceType.OTHER
     input_schema: dict = Field(default_factory=dict, description="JSON Schema")
@@ -24,6 +29,7 @@ class ServiceUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=255)
     version: str | None = Field(default=None, max_length=50)
     description: str | None = None
+    queue: str | None = Field(default=None, max_length=255)
     tags: list[str] | None = None
     type: ServiceType | None = None
     input_schema: dict | None = None

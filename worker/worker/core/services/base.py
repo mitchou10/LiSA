@@ -49,6 +49,9 @@ class BaseService(ABC):
     description: str | None = None
     tags: list[str] = []
     type: str = "other"  # "guard" | "analyser" | "other"
+    # Celery queue the worker consumes from. ``None`` lets the backend fall
+    # back to routing by the service name.
+    queue: str | None = None
     input_schema: dict[str, Any] = {}
     output_schema: dict[str, Any] = {}
 
@@ -107,6 +110,7 @@ class BaseService(ABC):
             "name": self.name,
             "version": self.version,
             "description": self.description,
+            "queue": self.queue,
             "tags": list(self.tags),
             "type": self.type,
             "input_schema": self.input_schema,

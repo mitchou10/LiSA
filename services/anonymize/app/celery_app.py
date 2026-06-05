@@ -30,6 +30,9 @@ celery_app.conf.update(
     accept_content=["json"],
     task_track_started=True,
     worker_prefetch_multiplier=1,
+    # Consume from (and default-route to) this service's own queue so that
+    # heterogeneous workers never receive tasks they cannot handle.
+    task_default_queue=config.CELERY_QUEUE,
 )
 
 

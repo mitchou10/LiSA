@@ -71,6 +71,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       LISA_API_URL: http://server:8000
       LISA_SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-service-token}
+      CELERY_QUEUE: ${ANONYMIZE_QUEUE:-llm-guard-anonymize}
     depends_on:
       redis:
         condition: service_healthy

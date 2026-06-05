@@ -26,6 +26,9 @@ class Service(Base, TimestampMixin):
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     version: Mapped[str] = mapped_column(String(50), nullable=False, default="0.1.0")
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Celery queue the worker consumes from. Defaults to the service name when
+    # not set (see TaskService._dispatch).
+    queue: Mapped[str | None] = mapped_column(String(255), nullable=True)
     tags: Mapped[list] = mapped_column(JSONType, nullable=False, default=list)
     type: Mapped[ServiceType] = mapped_column(
         SAEnum(ServiceType, name="service_type"),

@@ -31,7 +31,12 @@ class TaskService:
         service = await self.services.get(task.service_id)
         if service is None:
             return
-        dispatch_task(service.name, str(task.id), task.input_data)
+        dispatch_task(
+            service.name,
+            str(task.id),
+            task.input_data,
+            queue=service.queue or service.name,
+        )
 
     async def submit(self, data: TaskSubmit) -> Task:
         if data.parent_task_id is not None:
