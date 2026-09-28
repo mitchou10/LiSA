@@ -80,6 +80,26 @@ services:
     networks:
       - lisa
 
+  safety:
+    image: lisa-service-safety:v0.4.0
+    container_name: lisa-safety
+    build:
+      context: .
+      dockerfile: services/safety/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LISA_API_URL: http://server:8000
+      LISA_SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-service-token}
+      CELERY_QUEUE: ${SAFETY_QUEUE:-llm-guard-safety}
+      ENABLED_SCANNERS: ${ENABLED_SCANNERS:-prompt_injection,toxicity,secrets}
+    depends_on:
+      redis:
+        condition: service_healthy
+      server:
+        condition: service_started
+    networks:
+      - lisa
+
   frontend:
     image: lisa-frontend:v0.4.0
     container_name: lisa-frontend

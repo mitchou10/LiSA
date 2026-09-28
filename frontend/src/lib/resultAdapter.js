@@ -68,7 +68,7 @@ const ENTITY_TYPE_MAP = {
 };
 
 function labelFor(entityType, classification) {
-  const cls = classification || ENTITY_TYPE_MAP[entityType] || "unknown";
+  const cls = classification || ENTITY_TYPE_MAP[entityType || ""] || "unknown";
   const found = TEXT_LABELS.find((l) => l.classification === cls);
   return found || TEXT_LABELS.at(-1); // fallback to "Légitime"
 }
@@ -99,6 +99,9 @@ export function adaptBackendToTextResult(analyseResult, originalText) {
     const detections = page.detections || [];
     for (const det of detections) {
       const entities = det.entities || [];
+
+      // Case 1: detection has entities with char offsets → create spans
+      //         for each entity (e.g. PII from Anonymize, secrets from Secrets).
       for (const entity of entities) {
         if (entity.start_char == null || entity.end_char == null) continue;
         if (entity.start_char < 0) continue;
@@ -116,8 +119,30 @@ export function adaptBackendToTextResult(analyseResult, originalText) {
           severity: severityFor(det, entity),
           proposals: labelInfo.proposals || [],
           decision: null,
-          // Keep the service name if available (added by consolidate())
           service: det.service || entity.service,
+        });
+        spanIdx++;
+      }
+
+      // Case 2: detection is flagged but has no entities (e.g. PromptInjection,
+      //         Toxicity — they score the whole text, not specific spans).
+      //         Create a span covering the entire text so the user sees the
+      //         issue highlighted.
+      if (det.flagged && entities.length === 0) {
+        const labelInfo = labelFor(null, det.classification);
+        spans.push({
+          id: `span-${spanIdx++}`,
+          start_char: 0,
+          end_char: (originalText || "").length,
+          text: originalText || "",
+          classification: labelInfo.classification,
+          label: labelInfo.label,
+          description: labelInfo.description || "",
+          probability: det.confidence ?? 0,
+          severity: det.severity || "medium",
+          proposals: labelInfo.proposals || [],
+          decision: null,
+          service: det.service,
         });
         spanIdx++;
       }
