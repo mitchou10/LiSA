@@ -32,6 +32,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { cn } from "../lib/utils";
 import { getDashboardStats } from "../lib/api";
+import { mockDashboardStats } from "../lib/mockDashboard";
 import { useI18n } from "../lib/i18n.jsx";
 
 const RANGES = [
@@ -99,8 +100,15 @@ export default function DashboardPage() {
       });
       setStats(data);
     } catch (err) {
-      setError(err?.message || t("dashboard.error"));
-      setStats(null);
+      // Backend unavailable → fall back to mock data so the dashboard is
+      // still explorable in dev mode.
+      try {
+        const mock = mockDashboardStats({ userId: userId || undefined, days });
+        setStats(mock);
+      } catch {
+        setError(err?.message || t("dashboard.error"));
+        setStats(null);
+      }
     } finally {
       setLoading(false);
     }
