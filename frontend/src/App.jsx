@@ -13,7 +13,7 @@ import { useAuth } from "./lib/auth.jsx";
 import HealthIndicator from "./components/HealthIndicator";
 import UserMenu from "./components/UserMenu";
 import ProtectedRoute from "./components/ProtectedRoute";
-import AnalyzePage from "./pages/AnalyzePage";
+import AnalysisPage from "./pages/AnalysisPage";
 import ServicesPage from "./pages/ServicesPage";
 import TaskDetailPage from "./pages/TaskDetailPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -103,7 +103,7 @@ export default function App() {
             path="/analysis"
             element={
               <ProtectedRoute>
-                <AnalyzePage />
+                <AnalysisPage />
               </ProtectedRoute>
             }
           />
