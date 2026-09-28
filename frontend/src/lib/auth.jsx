@@ -8,12 +8,30 @@ import {
 
 const AuthContext = createContext(null);
 
+// Dev-only auth bypass. Set VITE_BYPASS_AUTH=true in frontend/.env.local to
+// skip the login screen and use a mocked admin user without a backend.
+const BYPASS_AUTH = import.meta.env.VITE_BYPASS_AUTH === "true";
+
+const MOCK_USER = {
+  id: "dev-user",
+  username: "dev",
+  email: "dev@lisa.local",
+  role: "admin",
+};
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
+
+    if (BYPASS_AUTH) {
+      setUser(MOCK_USER);
+      setLoading(false);
+      return;
+    }
+
     const token = getToken();
     if (!token) {
       setLoading(false);
@@ -39,12 +57,20 @@ export function AuthProvider({ children }) {
 
   const value = useMemo(() => {
     const signIn = async (username, password) => {
+      if (BYPASS_AUTH) {
+        setUser(MOCK_USER);
+        return MOCK_USER;
+      }
       await apiLogin({ username, password });
       const me = await getMe();
       setUser(me);
       return me;
     };
     const signOut = () => {
+      if (BYPASS_AUTH) {
+        setUser(null);
+        return;
+      }
       apiLogout();
       setUser(null);
     };
