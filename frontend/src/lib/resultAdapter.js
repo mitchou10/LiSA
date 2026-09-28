@@ -38,8 +38,9 @@
 
 import { TEXT_LABELS } from "./mockResults";
 
-// Map backend entity types (from llm-guard / Presidio) to our TEXT_LABELS.
+// Map backend entity types (from llm-guard / Presidio / GLiNER) to TEXT_LABELS.
 const ENTITY_TYPE_MAP = {
+  // llm-guard / Presidio PII types
   EMAIL_ADDRESS: "pii",
   EMAIL: "pii",
   PHONE_NUMBER: "pii",
@@ -56,9 +57,17 @@ const ENTITY_TYPE_MAP = {
   IP_ADDRESS: "pii",
   US_PASSPORT: "pii",
   US_DRIVER_LICENSE: "pii",
+  // llm-guard secrets
   SECRET: "secret_leak",
   API_KEY: "secret_leak",
-  // llm-guard may return these
+  // GLiNER high-level categories
+  PII: "pii",
+  POLICE: "police",
+  HEALTH: "health",
+  LEGAL: "legal",
+  SECRET: "secret_leak",
+  OTHER: "legitimate",
+  // llm-guard safety scanners
   PROMPT_INJECTION: "prompt_injection",
   JAILBREAK: "jailbreak",
   TOXICITY: "toxicity",

@@ -100,6 +100,27 @@ services:
     networks:
       - lisa
 
+  gliner:
+    image: lisa-service-gliner:v0.4.0
+    container_name: lisa-gliner
+    build:
+      context: .
+      dockerfile: services/gliner/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LISA_API_URL: http://server:8000
+      LISA_SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-service-token}
+      CELERY_QUEUE: ${GLINER_QUEUE:-gliner-ner}
+      GLINER_MODEL: ${GLINER_MODEL:-gliner-community/gliner_small-v2.5}
+      GLINER_THRESHOLD: ${GLINER_THRESHOLD:-0.5}
+    depends_on:
+      redis:
+        condition: service_healthy
+      server:
+        condition: service_started
+    networks:
+      - lisa
+
   frontend:
     image: lisa-frontend:v0.4.0
     container_name: lisa-frontend

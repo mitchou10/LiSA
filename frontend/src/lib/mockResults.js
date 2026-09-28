@@ -154,6 +154,9 @@ export const TEXT_LABELS = [
   { label: "Fuite de secret", classification: "secret_leak", color: "#b91c1c", severity: "high" },
   { label: "Donnée personnelle (PII)", classification: "pii", color: "#f59e0b", severity: "medium" },
   { label: "Toxicité", classification: "toxicity", color: "#f97316", severity: "medium" },
+  { label: "Police / Justice", classification: "police", color: "#8b5cf6", severity: "medium" },
+  { label: "Santé", classification: "health", color: "#06b6d4", severity: "medium" },
+  { label: "Juridique", classification: "legal", color: "#6366f1", severity: "medium" },
   { label: "Légitime", classification: "legitimate", color: "#10b981", severity: "low" },
 ];
 
