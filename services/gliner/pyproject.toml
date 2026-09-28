@@ -1,0 +1,28 @@
+[project]
+name = "lisa-service-gliner"
+version = "0.1.0"
+description = "LiSA worker service: zero-shot multilingual NER via GLiNER for PII, police, health, legal, and secret entities."
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "celery[redis]>=5.4",
+    "gliner>=0.2",
+    "lisa-worker",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-mock>=3.12",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# For local development, resolve the worker package from the sibling folder.
+[tool.uv.sources]
+lisa-worker = { path = "../../worker", editable = true }
