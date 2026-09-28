@@ -2,11 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { submitTask, getTask, getServices } from "../lib/api";
 import { mockAnalyze } from "../lib/mockApi";
 import { SERVICES as MOCK_SERVICES } from "../lib/mockData";
+import { useAuth } from "../lib/auth";
 
-const USER_ID = "web-user";
 const TERMINAL = new Set(["success", "error", "revoked"]);
 const POLL_INTERVAL = 1200;
 const MAX_POLLS = 100;
+
+// When true, the hook always uses mock data regardless of backend availability.
+// When false (default), it tries the real backend and only falls back to mocks
+// in dev mode when the API is unreachable.
+const FORCE_MOCKS =
+  import.meta.env.VITE_USE_MOCKS === "true" ||
+  import.meta.env.VITE_USE_MOCKS === "1";
 
 // Merge every finished child's `Analyse` output into a single pages[] tree.
 function consolidate(runs) {
@@ -45,6 +52,8 @@ function consolidate(runs) {
  *   `mockAnalyze` scanner when omitted.
  */
 export function useAnalysis(opts = {}) {
+  const { user } = useAuth();
+  const userId = user?.id || "web-user";
   const mockFnRef = useRef(opts.mockFn);
   mockFnRef.current = opts.mockFn;
 
@@ -61,8 +70,16 @@ export function useAnalysis(opts = {}) {
   const pollRef = useRef(null);
   const cancelRef = useRef(false);
 
-  // Load available services (fall back to mock data when the API is down).
+  // Load available services (fall back to mock data when the API is down
+  // or when mocks are explicitly forced via VITE_USE_MOCKS).
   useEffect(() => {
+    if (FORCE_MOCKS) {
+      setServices(MOCK_SERVICES);
+      setServicesReal(false);
+      setSelected(new Set(MOCK_SERVICES.map((s) => s.id)));
+      return;
+    }
+
     let active = true;
     getServices()
       .then((data) => {
@@ -75,9 +92,14 @@ export function useAnalysis(opts = {}) {
       })
       .catch(() => {
         if (!active) return;
-        setServices(MOCK_SERVICES);
+        // In dev, fall back to mock services so the UI is still usable.
+        // In prod, keep the empty list — the error will surface on analyze.
+        const useMocks = import.meta.env.DEV;
+        setServices(useMocks ? MOCK_SERVICES : []);
         setServicesReal(false);
-        setSelected(new Set(MOCK_SERVICES.map((s) => s.id)));
+        setSelected(
+          new Set((useMocks ? MOCK_SERVICES : []).map((s) => s.id))
+        );
       });
     return () => {
       active = false;
@@ -182,14 +204,14 @@ export function useAnalysis(opts = {}) {
 
       try {
         // 1) Create the parent "group" task (no service of its own).
-        const parent = await submitTask({ userId: USER_ID, inputData });
+        const parent = await submitTask({ userId, inputData });
         setGroup(parent);
 
         // 2) Fan out one child task per selected service.
         const children = await Promise.all(
           chosen.map((svc) =>
             submitTask({
-              userId: USER_ID,
+              userId,
               inputData,
               serviceId: svc.id,
               parentTaskId: parent.id,

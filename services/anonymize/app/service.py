@@ -92,14 +92,19 @@ class AnonymizeService(BaseService):
         self._vault = None
 
     def _get_scanner(self):
-        """Lazily build the Anonymize scanner and its Vault."""
-        if self._scanner is None:
-            self._vault = Vault()
-            self._scanner = Anonymize(
-                self._vault,
-                threshold=config.ANONYMIZE_THRESHOLD,
-                language=config.ANONYMIZE_LANGUAGE,
-            )
+        """Build a fresh Anonymize scanner with a new Vault.
+
+        The scanner is recreated on every call so the Vault starts empty.
+        If we reuse a cached scanner, the Vault accumulates entries across
+        tasks and subsequent scans return no new entities (because the PII
+        is already stored), producing ``entities: null``.
+        """
+        self._vault = Vault()
+        self._scanner = Anonymize(
+            self._vault,
+            threshold=config.ANONYMIZE_THRESHOLD,
+            language=config.ANONYMIZE_LANGUAGE,
+        )
         return self._scanner
 
     # -- page-level scanning ----------------------------------------------
@@ -137,7 +142,7 @@ class AnonymizeService(BaseService):
             "action": "redact" if flagged else "allow",
             "service_id": self.id,
             "pii": flagged,
-            "entities": entities or None,
+            "entities": entities,
             "details": {"sanitized": sanitized, "risk_score": score},
         }
 

@@ -149,12 +149,12 @@ const BBOX_CLASSIFICATIONS = [
 
 /** Labels available for manual text annotation (mirrors BBOX_LABELS). */
 export const TEXT_LABELS = [
-  { label: "Prompt Injection", color: "#ef4444", severity: "high" },
-  { label: "Jailbreak", color: "#dc2626", severity: "high" },
-  { label: "Fuite de secret", color: "#b91c1c", severity: "high" },
-  { label: "Donnée personnelle (PII)", color: "#f59e0b", severity: "medium" },
-  { label: "Toxicité", color: "#f97316", severity: "medium" },
-  { label: "Légitime", color: "#10b981", severity: "low" },
+  { label: "Prompt Injection", classification: "prompt_injection", color: "#ef4444", severity: "high" },
+  { label: "Jailbreak", classification: "jailbreak", color: "#dc2626", severity: "high" },
+  { label: "Fuite de secret", classification: "secret_leak", color: "#b91c1c", severity: "high" },
+  { label: "Donnée personnelle (PII)", classification: "pii", color: "#f59e0b", severity: "medium" },
+  { label: "Toxicité", classification: "toxicity", color: "#f97316", severity: "medium" },
+  { label: "Légitime", classification: "legitimate", color: "#10b981", severity: "low" },
 ];
 
 function rand(min, max) {

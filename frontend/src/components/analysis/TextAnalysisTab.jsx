@@ -9,6 +9,7 @@ import Results from "../../Results";
 import { useAnalysis } from "../../hooks/useAnalysis";
 import { useI18n } from "../../lib/i18n.jsx";
 import { mockTextAnalysis, mockPredictSpan } from "../../lib/mockResults";
+import { adaptBackendToTextResult } from "../../lib/resultAdapter";
 
 /**
  * Text analysis tab: paste/type raw text and run the scanners on it.
@@ -71,7 +72,7 @@ export default function TextAnalysisTab() {
       inputTitleKey="analyze.input.title"
       inputDescKey="analyze.input.desc"
       ResultComponent={TextResultAdapter}
-      resultProps={{ onDecision: handleDecision, onAddSpan: handleAddSpan, onUpdateSpan: handleUpdateSpan, canAnnotate: persist }}
+      resultProps={{ onDecision: handleDecision, onAddSpan: handleAddSpan, onUpdateSpan: handleUpdateSpan, canAnnotate: persist, originalText: text }}
     >
       <div className="flex flex-col gap-4">
         <Textarea
@@ -125,10 +126,11 @@ export default function TextAnalysisTab() {
 }
 
 /**
- * Renders TextResultView when a rich mock result (with spans) is available,
- * and falls back to the legacy Results component for real backend output.
+ * Renders TextResultView when a rich result (with spans) is available,
+ * and falls back to the legacy Results component for raw backend output
+ * that can't be adapted.
  */
-function TextResultAdapter({ result, loading, error, onDecision, onAddSpan, onUpdateSpan, canAnnotate }) {
+function TextResultAdapter({ result, loading, error, onDecision, onAddSpan, onUpdateSpan, canAnnotate, originalText }) {
   const { t } = useI18n();
 
   if (error) {
@@ -153,6 +155,7 @@ function TextResultAdapter({ result, loading, error, onDecision, onAddSpan, onUp
       </div>
     );
   }
+
   // Rich mock result (text spans) → dedicated view
   if (result.kind === "text" || result.spans) {
     return (
@@ -165,6 +168,23 @@ function TextResultAdapter({ result, loading, error, onDecision, onAddSpan, onUp
       />
     );
   }
+
+  // Backend Analyse result (pages/detections) → try to adapt to text spans
+  if (result.pages && originalText) {
+    const adapted = adaptBackendToTextResult(result, originalText);
+    if (adapted) {
+      return (
+        <TextResultView
+          result={adapted}
+          onDecision={onDecision}
+          onAddSpan={onAddSpan}
+          onUpdateSpan={onUpdateSpan}
+          canAnnotate={canAnnotate}
+        />
+      );
+    }
+  }
+
   // Legacy backend result → default Results component
   return <Results result={result} loading={loading} error={error} />;
 }
