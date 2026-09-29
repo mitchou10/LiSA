@@ -65,3 +65,22 @@ GLINER_LABELS: str = os.getenv(
         "private key",
     ]),
 )
+
+# -- Remote detection profile (labels/categories edited from the LiSA UI) ---
+# Key of this service's profile on the backend.
+PROFILE_KEY: str = "gliner-ner"
+
+# Redis pub/sub channel the backend publishes to when a profile changes.
+PROFILE_CHANNEL: str = os.getenv("PROFILE_CHANNEL", "lisa:detection-profiles")
+
+# Safety-net refresh period (seconds) in case a pub/sub message is missed.
+PROFILE_REFRESH_SECONDS: float = float(os.getenv("PROFILE_REFRESH_SECONDS", "300"))
+
+
+def profile_enabled() -> bool:
+    """Whether to fetch the profile from the backend (else env defaults only)."""
+    return os.getenv("GLINER_PROFILE_ENABLED", "true").lower() not in (
+        "0",
+        "false",
+        "no",
+    )

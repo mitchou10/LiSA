@@ -59,3 +59,28 @@ pytest
 
 > Tables are auto-created on startup. For production, manage schema changes
 > with a migration tool such as Alembic.
+
+## Database migrations (Alembic)
+
+The schema is managed by Alembic (`backend/migrations`). Migrations are applied
+automatically at startup (`RUN_MIGRATIONS=true`, the default). Manually:
+
+```bash
+cd backend
+alembic upgrade head                                  # apply
+alembic revision --autogenerate -m "describe change"  # after editing models
+```
+
+Databases created before Alembic are adopted transparently: revision `0001`
+only creates tables that are missing.
+
+## Detection profiles
+
+Editable, versioned service settings (currently the GLiNER labels, categories,
+severities, actions and thresholds) live in `detection_profiles` /
+`detection_profile_versions` (append-only). Routes under
+`/api/v1/detection-profiles/{service_key}`: read for any user, write for admins.
+Saving (or restoring) a version publishes `{"service_key", "version"}` on the
+Redis channel `PROFILE_CHANNEL` (default `lisa:detection-profiles`) so workers
+reload immediately; they also refresh every `PROFILE_REFRESH_SECONDS` (300) and
+fall back to their environment defaults if the backend is unreachable.

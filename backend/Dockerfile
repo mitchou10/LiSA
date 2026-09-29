@@ -14,6 +14,8 @@ WORKDIR /app
 # Copy project metadata and source, then install with uv.
 COPY pyproject.toml ./
 COPY app ./app
+COPY alembic.ini ./
+COPY migrations ./migrations
 RUN uv pip install --system --no-cache .
 
 EXPOSE 8000

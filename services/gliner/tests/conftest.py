@@ -15,6 +15,8 @@ def mock_env(monkeypatch):
     monkeypatch.setenv("GLINER_THRESHOLD", "0.5")
     monkeypatch.setenv("GLINER_LABELS", "person,email address,password,API key")
     monkeypatch.setenv("CELERY_QUEUE", "test-queue")
+    # Unit tests never call the backend or Redis; they use the env defaults.
+    monkeypatch.setenv("GLINER_PROFILE_ENABLED", "false")
 
 
 @pytest.fixture
