@@ -1,9 +1,23 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { ChevronDown, LogOut, ShieldCheck, UserCircle } from "lucide-react";
+import { NavLink, useNavigate } from "react-router-dom";
+import {
+  ChevronDown,
+  LayoutDashboard,
+  LogOut,
+  Network,
+  ShieldAlert,
+  ShieldCheck,
+  UserCircle,
+} from "lucide-react";
 import { cn } from "../lib/utils";
 import { useI18n } from "../lib/i18n.jsx";
 import { useAuth } from "../lib/auth.jsx";
+
+const MENU_LINKS = [
+  { to: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
+  { to: "/services", labelKey: "nav.services", icon: Network },
+  { to: "/sensitive-data", labelKey: "nav.sensitive", icon: ShieldAlert },
+];
 
 export default function UserMenu() {
   const { t } = useI18n();
@@ -58,6 +72,26 @@ export default function UserMenu() {
               {isAdmin && <ShieldCheck className="h-3 w-3 text-primary" />}
               {isAdmin ? t("auth.role.admin") : t("auth.role.user")}
             </p>
+          </div>
+
+          <div className="border-b border-border py-1">
+            {MENU_LINKS.map(({ to, labelKey, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                role="menuitem"
+                onClick={() => setOpen(false)}
+                className={({ isActive }) =>
+                  cn(
+                    "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted hover:text-foreground",
+                    isActive ? "text-foreground" : "text-muted-foreground"
+                  )
+                }
+              >
+                <Icon className="h-4 w-4" />
+                {t(labelKey)}
+              </NavLink>
+            ))}
           </div>
 
           <div className="py-1">

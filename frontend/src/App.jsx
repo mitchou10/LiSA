@@ -1,11 +1,8 @@
 import {
   Shield,
   ScanSearch,
-  Network,
   Languages,
-  LayoutDashboard,
   LogIn,
-  ShieldAlert,
 } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { cn } from "./lib/utils";
@@ -23,9 +20,6 @@ import LoginPage from "./pages/LoginPage";
 
 const NAV = [
   { to: "/analysis", labelKey: "nav.analyze", icon: ScanSearch },
-  { to: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
-  { to: "/services", labelKey: "nav.services", icon: Network },
-  { to: "/sensitive-data", labelKey: "nav.sensitive", icon: ShieldAlert },
 ];
 
 export default function App() {
