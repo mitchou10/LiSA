@@ -5,6 +5,7 @@ import {
   Languages,
   LayoutDashboard,
   LogIn,
+  ShieldAlert,
 } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { cn } from "./lib/utils";
@@ -17,12 +18,14 @@ import AnalysisPage from "./pages/AnalysisPage";
 import ServicesPage from "./pages/ServicesPage";
 import TaskDetailPage from "./pages/TaskDetailPage";
 import DashboardPage from "./pages/DashboardPage";
+import SensitiveDataPage from "./pages/SensitiveDataPage";
 import LoginPage from "./pages/LoginPage";
 
 const NAV = [
   { to: "/analysis", labelKey: "nav.analyze", icon: ScanSearch },
   { to: "/dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
   { to: "/services", labelKey: "nav.services", icon: Network },
+  { to: "/sensitive-data", labelKey: "nav.sensitive", icon: ShieldAlert },
 ];
 
 export default function App() {
@@ -128,6 +131,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ServicesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sensitive-data"
+            element={
+              <ProtectedRoute>
+                <SensitiveDataPage />
               </ProtectedRoute>
             }
           />

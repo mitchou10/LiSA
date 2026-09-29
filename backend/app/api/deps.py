@@ -12,6 +12,7 @@ from app.database import get_session
 from app.models.enums import UserRole
 from app.schemas.auth import CurrentUser
 from app.services.analytics import AnalyticsService
+from app.services.detection_profile import DetectionProfileService
 from app.services.service import ServiceService
 from app.services.task import TaskService
 from app.services.user import UserService
@@ -37,10 +38,17 @@ def get_user_service(session: SessionDep) -> UserService:
     return UserService(session)
 
 
+def get_detection_profile_service(session: SessionDep) -> DetectionProfileService:
+    return DetectionProfileService(session)
+
+
 ServiceServiceDep = Annotated[ServiceService, Depends(get_service_service)]
 TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 AnalyticsServiceDep = Annotated[AnalyticsService, Depends(get_analytics_service)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
+DetectionProfileServiceDep = Annotated[
+    DetectionProfileService, Depends(get_detection_profile_service)
+]
 
 
 # ---------------------------------------------------------------------------

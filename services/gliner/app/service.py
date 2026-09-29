@@ -14,7 +14,10 @@ from typing import Any
 
 from worker.core.services.base import BaseService, TaskStatus
 
+from worker.core.client.detection_profiles import DetectionProfileClient
+
 from app import config
+from app.profile import Profile, ProfileProvider
 
 logger = logging.getLogger("lisa.service.gliner")
 
@@ -102,8 +105,12 @@ CATEGORY_MAP: dict[str, str] = {
 }
 
 
+_SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2}
+_ACTION_RANK = {"allow": 0, "redact": 1, "block": 2}
+
+
 def _severity_for_category(category: str) -> str:
-    """Default severity per category (can be overridden by confidence)."""
+    """Default severity per category, used when no remote profile is available."""
     if category in ("SECRET", "POLICE"):
         return "high"
     if category in ("PII", "HEALTH", "LEGAL"):
@@ -127,10 +134,49 @@ class GlinerService(BaseService):
     input_schema = INPUT_SCHEMA
     output_schema = OUTPUT_SCHEMA
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self, *, profile_provider: ProfileProvider | None = None, **kwargs: Any
+    ) -> None:
         super().__init__(**kwargs)
         self._model = None
         self._labels: list[str] | None = None
+        self._profiles = profile_provider or self._build_profile_provider()
+
+    # -- detection profile ---------------------------------------------------
+    def _build_profile_provider(self) -> ProfileProvider:
+        """Live profile from the backend when enabled, else env defaults."""
+        fetch = None
+        if config.profile_enabled():
+            client = DetectionProfileClient()
+            fetch = lambda: client.get_active_config(config.PROFILE_KEY)  # noqa: E731
+        return ProfileProvider(
+            service_key=config.PROFILE_KEY,
+            fallback=self._default_profile,
+            fetch=fetch,
+            redis_url=config.REDIS_URL if fetch else None,
+            channel=config.PROFILE_CHANNEL,
+            refresh_seconds=config.PROFILE_REFRESH_SECONDS,
+        )
+
+    def _default_profile(self) -> Profile:
+        """Profile derived from the environment (used until/unless remote)."""
+        return {
+            "version": None,
+            "threshold": config.GLINER_THRESHOLD,
+            "entities": [
+                {
+                    "label": label,
+                    "category": CATEGORY_MAP.get(label, "OTHER"),
+                    "severity": _severity_for_category(
+                        CATEGORY_MAP.get(label, "OTHER")
+                    ),
+                    "action": "redact",
+                    "enabled": True,
+                    "threshold": None,
+                }
+                for label in self._get_labels()
+            ],
+        }
 
     def _get_labels(self) -> list[str]:
         """Parse the comma-separated label list from config."""
@@ -149,61 +195,81 @@ class GlinerService(BaseService):
 
             logger.info("Loading GLiNER model: %s", config.GLINER_MODEL)
             self._model = GLiNER.from_pretrained(config.GLINER_MODEL)
-            logger.info("GLiNER model loaded with labels: %s", self._get_labels())
+            logger.info("GLiNER model loaded")
         return self._model
 
     # -- page-level scanning ----------------------------------------------
     def _scan_page(self, content: str) -> dict[str, Any]:
         """Run GLiNER on one page and return a detection dict."""
-        model = self._get_model()
-        labels = self._get_labels()
+        profile = self._profiles.get()
+        rules = {
+            e["label"]: e for e in profile["entities"] if e.get("enabled", True)
+        }
+        labels = list(rules)
+        global_threshold = float(profile["threshold"])
 
-        entities_raw = model.predict_entities(
-            content,
-            labels,
-            threshold=config.GLINER_THRESHOLD,
-        )
+        entities_raw: list[dict[str, Any]] = []
+        if labels:
+            # Query with the lowest threshold in play, then filter per label.
+            floor = min(
+                [global_threshold]
+                + [r["threshold"] for r in rules.values() if r.get("threshold") is not None]
+            )
+            entities_raw = self._get_model().predict_entities(
+                content, labels, threshold=floor
+            )
 
         entities: list[dict[str, Any]] = []
-        for idx, ent in enumerate(entities_raw):
+        for ent in entities_raw:
             label = ent.get("label", "unknown")
-            category = CATEGORY_MAP.get(label, "OTHER")
+            rule = rules.get(label, {})
+            threshold = rule.get("threshold")
+            score = float(ent.get("score", 0.0))
+            if score < (global_threshold if threshold is None else threshold):
+                continue
+            action = rule.get("action", "redact")
             entities.append(
                 {
-                    "id": f"e{idx}",
-                    "type": category,  # high-level category (PII, POLICE, ...)
+                    "id": f"e{len(entities)}",
+                    "type": rule.get("category", CATEGORY_MAP.get(label, "OTHER")),
                     "label": label,  # original GLiNER label
                     "text": ent.get("text", ""),
                     "start_char": ent.get("start", -1),
                     "end_char": ent.get("end", -1),
-                    "flagged": True,
-                    "confidence": float(ent.get("score", 0.0)),
+                    "flagged": action != "allow",
+                    "confidence": score,
+                    "severity": rule.get("severity", "low"),
+                    "action": action,
                 }
             )
 
-        flagged = len(entities) > 0
-        score = max((e["confidence"] for e in entities), default=0.0)
-
+        flagged_entities = [e for e in entities if e["flagged"]]
+        flagged = len(flagged_entities) > 0
         return {
             "flagged": flagged,
-            "confidence": score,
-            "severity": _severity_for_category(
-                max(
-                    (CATEGORY_MAP.get(e["label"], "OTHER") for e in entities),
-                    default="OTHER",
-                )
+            "confidence": max((e["confidence"] for e in flagged_entities), default=0.0),
+            "severity": max(
+                (e["severity"] for e in flagged_entities),
+                key=_SEVERITY_RANK.__getitem__,
             )
             if flagged
             else None,
-            "action": "redact" if flagged else "allow",
+            "action": max(
+                (e["action"] for e in flagged_entities),
+                key=_ACTION_RANK.__getitem__,
+            )
+            if flagged
+            else "allow",
             "service_id": self.id,
             "pii": any(e["type"] == "PII" for e in entities),
             "entities": entities,
             "classification": "gliner_ner",
+            "profile_version": profile.get("version"),
             "details": {
                 "model": config.GLINER_MODEL,
                 "labels": labels,
                 "num_entities": len(entities),
+                "profile_version": profile.get("version"),
             },
         }
 

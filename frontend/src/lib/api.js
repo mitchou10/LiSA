@@ -183,4 +183,29 @@ export async function getDashboardStats({ userId, days = 30 } = {}) {
   return request(`/analytics/dashboard${query}`);
 }
 
+// Detection profiles (versioned, editable sensitive-data settings) ---------
+export async function getDetectionProfile(serviceKey) {
+  return request(`/detection-profiles/${serviceKey}`);
+}
+
+export async function getProfileVersions(serviceKey, { limit = 50 } = {}) {
+  const data = await request(
+    `/detection-profiles/${serviceKey}/versions${buildQuery({ limit })}`
+  );
+  return data?.items ?? [];
+}
+
+export async function saveProfileVersion(serviceKey, { config, comment }) {
+  return request(`/detection-profiles/${serviceKey}/versions`, {
+    method: "POST",
+    body: JSON.stringify({ config, comment: comment || null }),
+  });
+}
+
+export async function restoreProfileVersion(serviceKey, version) {
+  return request(`/detection-profiles/${serviceKey}/versions/${version}/activate`, {
+    method: "POST",
+  });
+}
+
 export { BASE_URL };

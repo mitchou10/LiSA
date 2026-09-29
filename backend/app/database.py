@@ -35,12 +35,3 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency that yields an async database session."""
     async with async_session_factory() as session:
         yield session
-
-
-async def init_db() -> None:
-    """Create all tables. For production use migrations (e.g. Alembic)."""
-    # Import models so they are registered on the metadata before create_all.
-    from app import models  # noqa: F401
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)

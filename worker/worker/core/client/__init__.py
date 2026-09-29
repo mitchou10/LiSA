@@ -18,6 +18,7 @@ from __future__ import annotations
 import httpx
 
 from worker.core.client.base import BaseClient, ClientError
+from worker.core.client.detection_profiles import DetectionProfileClient
 from worker.core.client.health import HealthClient
 from worker.core.client.services import ServiceClient
 from worker.core.client.tasks import TaskClient
@@ -25,6 +26,7 @@ from worker.core.client.tasks import TaskClient
 __all__ = [
     "BaseClient",
     "ClientError",
+    "DetectionProfileClient",
     "HealthClient",
     "ServiceClient",
     "TaskClient",
@@ -50,6 +52,7 @@ class LisaClient:
         self.health = HealthClient(**kwargs)
         self.services = ServiceClient(**kwargs)
         self.tasks = TaskClient(**kwargs)
+        self.detection_profiles = DetectionProfileClient(**kwargs)
 
     def close(self) -> None:
         self._http.close()

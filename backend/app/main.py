@@ -6,7 +6,9 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import api_router, health
 from app.config import get_settings
-from app.database import async_session_factory, init_db
+from app.database import async_session_factory
+from app.migrations import run_migrations
+from app.services.detection_profile import DetectionProfileService
 from app.services.exceptions import (
     ConflictError,
     InvalidStateError,
@@ -29,10 +31,18 @@ async def _seed_admin() -> None:
         )
 
 
+async def _seed_detection_profiles() -> None:
+    """Create the default detection profiles (version 1) if missing."""
+    async with async_session_factory() as session:
+        await DetectionProfileService(session).ensure_defaults()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    await init_db()
+    if settings.run_migrations:
+        await run_migrations()
     await _seed_admin()
+    await _seed_detection_profiles()
     yield
 
 
