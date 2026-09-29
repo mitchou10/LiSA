@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     celery_broker_url: str | None = None
     celery_result_backend: str | None = None
 
+    # Schema migrations (Alembic) applied at startup.
+    run_migrations: bool = True
+
+    # Redis pub/sub channel used to tell workers a detection profile changed.
+    profile_channel: str = "lisa:detection-profiles"
+
     # CORS
     cors_origins: list[str] = ["*"]
 
@@ -43,6 +49,8 @@ class Settings(BaseSettings):
     # OIDC bearer tokens against a Keycloak realm via its JWKS endpoint).
     auth_provider: str = "local"
     keycloak_server_url: str | None = None  # e.g. https://kc.example.com
+    # Optional in-network URL used to fetch the JWKS (defaults to server URL).
+    keycloak_internal_url: str | None = None
     keycloak_realm: str | None = None
     keycloak_client_id: str | None = None
     keycloak_admin_role: str = "admin"
@@ -64,8 +72,15 @@ class Settings(BaseSettings):
 
     @property
     def keycloak_jwks_url(self) -> str | None:
-        issuer = self.keycloak_issuer
-        return f"{issuer}/protocol/openid-connect/certs" if issuer else None
+        if not self.keycloak_realm:
+            return None
+        base = self.keycloak_internal_url or self.keycloak_server_url
+        if not base:
+            return None
+        return (
+            f"{base.rstrip('/')}/realms/{self.keycloak_realm}"
+            "/protocol/openid-connect/certs"
+        )
 
 
 @lru_cache

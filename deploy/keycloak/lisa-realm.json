@@ -1,0 +1,73 @@
+{
+  "realm": "lisa",
+  "enabled": true,
+  "displayName": "LiSA",
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "bruteForceProtected": true,
+  "accessTokenLifespan": 900,
+  "roles": {
+    "realm": [
+      { "name": "admin", "description": "LiSA administrator" },
+      { "name": "user", "description": "LiSA standard user" }
+    ]
+  },
+  "defaultRole": { "name": "default-roles-lisa", "composite": true, "composites": { "realm": ["user"] } },
+  "clients": [
+    {
+      "clientId": "lisa-frontend",
+      "name": "LiSA Frontend",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "protocol": "openid-connect",
+      "rootUrl": "http://localhost:8080",
+      "baseUrl": "/",
+      "redirectUris": ["http://localhost:8080/*", "http://localhost:5173/*"],
+      "webOrigins": ["http://localhost:8080", "http://localhost:5173"],
+      "attributes": { "pkce.code.challenge.method": "S256", "post.logout.redirect.uris": "+" },
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "lisa-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "lisa-frontend",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "admin",
+      "email": "admin@lisa.local",
+      "firstName": "LiSA",
+      "lastName": "Admin",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "admin", "temporary": false }],
+      "realmRoles": ["admin", "user"]
+    },
+    {
+      "username": "user",
+      "email": "user@lisa.local",
+      "firstName": "LiSA",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [{ "type": "password", "value": "user", "temporary": false }],
+      "realmRoles": ["user"]
+    }
+  ]
+}
