@@ -34,9 +34,10 @@ services:
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}
-      KEYCLOAK_SERVER_URL: ${KEYCLOAK_SERVER_URL:-}
-      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-}
-      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-}
+      KEYCLOAK_SERVER_URL: ${KEYCLOAK_SERVER_URL:-http://localhost:8180}
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-lisa}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-lisa-frontend}
       KEYCLOAK_ADMIN_ROLE: ${KEYCLOAK_ADMIN_ROLE:-admin}
     ports:
       - "8000:8000"
@@ -44,6 +45,57 @@ services:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    networks:
+      - lisa
+
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: lisa-keycloak-db
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+      POSTGRES_DB: keycloak
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - lisa
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: lisa-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD:-keycloak}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      # Fixed public URL so the token issuer is stable (browser and server agree).
+      KC_HOSTNAME: ${KEYCLOAK_SERVER_URL:-http://localhost:8180}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./deploy/keycloak/lisa-realm.json:/opt/keycloak/data/import/lisa-realm.json:ro
+    ports:
+      - "8180:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    depends_on:
+      keycloak-db:
         condition: service_healthy
     networks:
       - lisa
@@ -138,6 +190,8 @@ services:
 
 volumes:
   db-data:
+    driver: local
+  keycloak-db-data:
     driver: local
 
 networks:
