@@ -15,6 +15,11 @@ const FORCE_MOCKS =
   import.meta.env.VITE_USE_MOCKS === "true" ||
   import.meta.env.VITE_USE_MOCKS === "1";
 
+// Services that prepare documents (OCR/parsing) instead of analysing content:
+// they are driven by the file tab and never offered as analysers.
+const PREPROCESSORS = new Set(["liteparse-ocr"]);
+const isAnalyser = (svc) => !PREPROCESSORS.has(svc.name);
+
 // Merge every finished child's `Analyse` output into a single pages[] tree.
 function consolidate(runs) {
   const byPage = new Map();
@@ -58,6 +63,7 @@ export function useAnalysis(opts = {}) {
   mockFnRef.current = opts.mockFn;
 
   const [services, setServices] = useState([]);
+  const [parserService, setParserService] = useState(null);
   const [servicesReal, setServicesReal] = useState(false);
   const [selected, setSelected] = useState(() => new Set());
 
@@ -86,9 +92,11 @@ export function useAnalysis(opts = {}) {
         if (!active) return;
         const list = Array.isArray(data) && data.length ? data : MOCK_SERVICES;
         const real = Array.isArray(data) && data.length > 0;
-        setServices(list);
+        const analysers = list.filter(isAnalyser);
+        setServices(analysers);
+        setParserService(real ? list.find((s) => !isAnalyser(s)) ?? null : null);
         setServicesReal(real);
-        setSelected(new Set(list.map((s) => s.id)));
+        setSelected(new Set(analysers.map((s) => s.id)));
       })
       .catch(() => {
         if (!active) return;
@@ -249,6 +257,7 @@ export function useAnalysis(opts = {}) {
     // services
     services,
     servicesReal,
+    parserService,
     selected,
     toggleService,
     selectAll,
@@ -263,6 +272,7 @@ export function useAnalysis(opts = {}) {
     showLoading,
     // result mutation (for rich mock views: validate/reject spans & bboxes)
     setMockResult,
+    setError,
     // actions
     analyze,
     reset,

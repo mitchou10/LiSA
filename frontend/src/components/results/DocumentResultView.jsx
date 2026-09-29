@@ -83,6 +83,11 @@ export default function DocumentResultView({ result, onBboxDecision, onAddBbox, 
             </p>
           </div>
           {result?.metadata?.mock && <Badge variant="muted">mock</Badge>}
+          {page.filename && (
+            <Badge variant="muted" className="max-w-[12rem] truncate">
+              {page.filename}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -343,10 +348,18 @@ function BboxCanvas({
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
       >
-        {/* Placeholder page content */}
-        <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-400">
-          {t("results.pagePlaceholder").replace("{n}", page.page_number)}
-        </div>
+        {page.image ? (
+          <img
+            src={page.image}
+            alt={page.filename || ""}
+            draggable={false}
+            className="pointer-events-none absolute inset-0 h-full w-full select-none"
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-400">
+            {t("results.pagePlaceholder").replace("{n}", page.page_number)}
+          </div>
+        )}
 
         {/* Bboxes */}
         {page.bboxes?.map((b) => {

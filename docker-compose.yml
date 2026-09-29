@@ -173,6 +173,28 @@ services:
     networks:
       - lisa
 
+  parser:
+    image: lisa-service-parser:v0.4.0
+    container_name: lisa-parser
+    build:
+      context: .
+      dockerfile: services/parser/Dockerfile
+      args:
+        OCR_LANGUAGE: ${OCR_LANGUAGE:-eng+fra}
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LISA_API_URL: http://server:8000
+      LISA_SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-service-token}
+      CELERY_QUEUE: ${PARSER_QUEUE:-liteparse-ocr}
+      OCR_LANGUAGE: ${OCR_LANGUAGE:-eng+fra}
+    depends_on:
+      redis:
+        condition: service_healthy
+      server:
+        condition: service_started
+    networks:
+      - lisa
+
   frontend:
     image: lisa-frontend:v0.4.0
     container_name: lisa-frontend
