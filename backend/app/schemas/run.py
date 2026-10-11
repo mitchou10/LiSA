@@ -27,6 +27,10 @@ class RunCreate(BaseModel):
     relation_ids: list[UUID] | None = None
     safety_ids: list[UUID] | None = None
 
+    # Files only: also classify the page screenshots with the image model (CLIP),
+    # using the same classifications. Only those with at least two labels.
+    classify_images: bool = True
+
     # Hide what was found, once the entities are known: the text comes back
     # with every character as "*" and each entity as a [LABEL] marker, and the
     # page images are replaced by a blurred copy with the labelled boxes.
@@ -45,7 +49,8 @@ class RunStep(BaseModel):
     """One task of the run, in execution order."""
 
     task_id: UUID
-    # parser, ner, relation, classification, safety or anonymize.
+    # parser, ner, relation, classification, image_classification, safety or
+    # anonymize.
     step: str
     service: str
     status: TaskStatus

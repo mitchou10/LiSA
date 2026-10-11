@@ -34,6 +34,7 @@ from app.services.task import TaskService
 
 PARSER = "liteparse-ocr"
 ANONYMIZE = "anonymize-v2"
+IMAGE_CLASSIFICATION = "image-classification"
 
 # kind of definition -> (step name, service name, RunCreate field)
 ANALYSES = {
@@ -108,6 +109,26 @@ def build_inputs(kind: str, definitions: list[Any]) -> dict[str, Any]:
     }
 
 
+def build_image_inputs(definitions: list[Any]) -> dict[str, Any]:
+    """The classifications the image model runs: the project's, with 2+ labels.
+
+    An image classification compares the image with every label, so a single
+    label has nothing to be compared with.
+    """
+    return {
+        "classifications": [
+            {
+                "name": d.name,
+                "labels": _labels(d),
+                "multi_label": d.multi_label,
+                "threshold": d.threshold,
+            }
+            for d in definitions
+            if len(d.labels) >= 2
+        ]
+    }
+
+
 class RunService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -176,6 +197,17 @@ class RunService:
         parser = await self._service(PARSER) if files else None
         workers = {kind: await self._service(ANALYSES[kind][1]) for kind in selected}
         anonymizer = await self._service(ANONYMIZE) if data.anonymize else None
+        # Files that are classified also have their screenshots classified.
+        image_inputs = (
+            build_image_inputs(selected["classifications"])
+            if files and data.classify_images and "classifications" in selected
+            else {"classifications": []}
+        )
+        image_worker = (
+            await self._service(IMAGE_CLASSIFICATION)
+            if image_inputs["classifications"]
+            else None
+        )
 
         parent = Task(
             user_id=user.id,
@@ -224,6 +256,20 @@ class RunService:
             steps.append((step, task, workers[kind]))
             if kind == "entities":
                 ner_task = task
+            if kind == "classifications" and image_worker is not None:
+                # Same classifications, on the page screenshots: the parser's
+                # pages arrive later, as screenshot keys only.
+                image_task = self._child(
+                    parent,
+                    user,
+                    image_worker.id,
+                    {
+                        **image_inputs,
+                        "awaiting": str(parser_task.id),
+                        "feed": "images",
+                    },
+                )
+                steps.append(("image_classification", image_task, image_worker))
 
         if anonymizer is not None:
             # Waits for the ner task: it needs the entities, and the pages that

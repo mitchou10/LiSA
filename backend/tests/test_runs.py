@@ -13,6 +13,7 @@ SERVICES = {
     "classification": "classification",
     "safety": "safety",
     "anonymize-v2": "anonymize-v2",
+    "image-classification": "image-classification",
 }
 
 
@@ -321,6 +322,7 @@ async def test_files_go_to_the_parser_first_and_the_rest_waits(
         ("ner", True),
         ("relation", True),
         ("classification", True),
+        ("image_classification", True),
         ("safety", True),
     ]
     # Only the parser is sent, with the file by its key in the bucket.
@@ -364,10 +366,19 @@ async def test_the_parser_output_releases_the_waiting_workers(
     assert resp.status_code == 200
 
     calls = by_service(sent)
-    assert set(calls) == {"ner", "relation", "classification", "safety"}
-    for _, _, payload, _ in sent:
-        assert payload["pages"] == pages  # the parser's pages, boxes included
-        assert "awaiting" not in payload
+    assert set(calls) == {
+        "ner",
+        "relation",
+        "classification",
+        "image-classification",
+        "safety",
+    }
+    shots = [{"page_number": 1, "s3_key": "pages/t/1/1.png"}]
+    for name, _, payload, _ in sent:
+        # The text workers get the parser's pages, boxes included; the image
+        # model only the screenshot keys.
+        assert payload["pages"] == (shots if name == "image-classification" else pages)
+        assert "awaiting" not in payload and "feed" not in payload
     assert calls["ner"][2]["entities"][0]["label"] == "iban"  # the project's data kept
 
     # Released once: a second parser update does not send them again.
@@ -395,7 +406,7 @@ async def test_a_failed_parser_fails_the_rest_of_the_run(
         await client.get(f"/api/v1/tasks/{run_id}/children", headers=admin_headers)
     ).json()
     waiting = [k for k in kids if k["id"] != parser_id]
-    assert len(waiting) == 4
+    assert len(waiting) == 5
     assert all(k["status"] == "error" and "parser" in k["error"] for k in waiting)
     parent = (await client.get(f"/api/v1/tasks/{run_id}", headers=admin_headers)).json()
     assert parent["status"] == "error"
@@ -703,7 +714,8 @@ async def test_a_private_output_is_stored_masked_but_the_next_worker_gets_it_cle
 
     # Sent clear to the analysis workers...
     for call in sent:
-        assert call[2]["pages"] == pages
+        if call[0] != "image-classification":  # that one only gets screenshot keys
+            assert call[2]["pages"] == pages
     # ...stored masked, for the parser's output and for each waiting task.
     kids = await _children(client, admin_headers, body["id"])
     stored = kids[parser_id]["output_data"]["pages"][0]
@@ -712,7 +724,9 @@ async def test_a_private_output_is_stored_masked_but_the_next_worker_gets_it_cle
     assert stored["s3_key"] == "pages/t/1/1.png"
     for kid in kids.values():
         if kid["id"] != parser_id and "pages" in kid["input_data"]:
-            assert kid["input_data"]["pages"][0]["content"] == mask(
+            page = kid["input_data"]["pages"][0]
+            # The image model's row holds no text at all, only the key.
+            assert page.get("content", mask("Maria Garcia pays FR76")) == mask(
                 "Maria Garcia pays FR76"
             )
     assert "Maria Garcia" not in str(kids)
@@ -783,3 +797,151 @@ async def test_a_private_task_cannot_be_retried(client, admin_headers, project, 
     resp = await client.post(f"/api/v1/tasks/{ner_id}/retry", headers=admin_headers)
     assert resp.status_code == 409 and "private" in resp.json()["detail"]
     assert sent == []  # never re-sent with a masked input
+
+
+# -- image classification: files are also classified by what they look like ------------
+async def test_a_classified_file_also_gets_its_screenshots_classified(
+    client, admin_headers, project, sent
+):
+    file = await upload(client, admin_headers)
+    body = (await run(client, admin_headers, project, file_ids=[file["id"]])).json()
+    steps = {s["step"]: s for s in body["steps"]}
+    assert steps["image_classification"]["service"] == "image-classification"
+    assert steps["image_classification"]["waiting"] is True
+    sent.clear()
+    pages = [
+        {"page_number": 1, "content": "text", "s3_key": "pages/t/1/1.png", "words": []},
+        {"page_number": 2, "content": "no screenshot", "s3_key": None},
+    ]
+    await _finish(client, admin_headers, steps["parser"]["task_id"], {"pages": pages})
+    payload = by_service(sent)["image-classification"][2]
+    # Only the pages that have a screenshot, as a key: no text.
+    assert payload["pages"] == [{"page_number": 1, "s3_key": "pages/t/1/1.png"}]
+    # The project's classification, labels with their descriptions.
+    (cls,) = payload["classifications"]
+    assert cls["name"] == "doc_type" and cls["multi_label"] is False
+    assert cls["labels"] == [
+        {"name": "invoice", "description": "A bill"},
+        {"name": "other", "description": None},
+    ]
+    assert "awaiting" not in payload and "feed" not in payload
+
+
+async def test_a_text_run_has_no_image_step(client, admin_headers, project, sent):
+    steps = (await run(client, admin_headers, project, text="x")).json()["steps"]
+    assert "image_classification" not in [s["step"] for s in steps]
+    assert "image-classification" not in {c[0] for c in sent}
+
+
+async def test_images_are_only_classified_with_classifications(
+    client, admin_headers, project, sent
+):
+    file = await upload(client, admin_headers)
+    steps = (
+        await run(
+            client, admin_headers, project, file_ids=[file["id"]], classification_ids=[]
+        )
+    ).json()["steps"]
+    assert "image_classification" not in [s["step"] for s in steps]
+
+
+async def test_the_image_step_can_be_switched_off(client, admin_headers, project, sent):
+    file = await upload(client, admin_headers)
+    steps = (
+        await run(
+            client, admin_headers, project, file_ids=[file["id"]], classify_images=False
+        )
+    ).json()["steps"]
+    assert "image_classification" not in [s["step"] for s in steps]
+    assert "classification" in [s["step"] for s in steps]
+
+
+async def test_a_classification_with_one_label_is_left_to_the_text_model(
+    client, admin_headers, project, sent
+):
+    """CLIP compares an image with every label: one label has nothing to be compared with."""
+    # Only the one-label classification is applied: no image step is created.
+    pid = project["id"]
+    one = (
+        await client.post(
+            f"{P}/{pid}/classifications",
+            json={"name": "lonely", "labels": ["only"]},
+            headers=admin_headers,
+        )
+    ).json()
+    file = await upload(client, admin_headers)
+    steps = (
+        await run(
+            client,
+            admin_headers,
+            project,
+            file_ids=[file["id"]],
+            classification_ids=[one["id"]],
+        )
+    ).json()["steps"]
+    assert "classification" in [s["step"] for s in steps]
+    assert "image_classification" not in [s["step"] for s in steps]
+    # Alongside a normal one, it is simply not sent to the image model.
+    sent.clear()
+    body = (
+        await run(
+            client,
+            admin_headers,
+            project,
+            file_ids=[file["id"]],
+            classification_ids=[one["id"], project["doc_type"]["id"]],
+        )
+    ).json()
+    parser_id = next(s["task_id"] for s in body["steps"] if s["step"] == "parser")
+    sent.clear()
+    await _finish(
+        client,
+        admin_headers,
+        parser_id,
+        {"pages": [{"page_number": 1, "content": "x", "s3_key": "pages/t/1/1.png"}]},
+    )
+    names = [
+        c["name"]
+        for c in by_service(sent)["image-classification"][2]["classifications"]
+    ]
+    assert names == ["doc_type"]
+
+
+async def test_no_screenshot_fails_the_image_step_only(
+    client, admin_headers, project, sent
+):
+    file = await upload(client, admin_headers)
+    body = (await run(client, admin_headers, project, file_ids=[file["id"]])).json()
+    parser_id = next(s["task_id"] for s in body["steps"] if s["step"] == "parser")
+    sent.clear()
+    await _finish(
+        client,
+        admin_headers,
+        parser_id,
+        {"pages": [{"page_number": 1, "content": "text only", "s3_key": None}]},
+    )
+    assert {"ner", "relation", "classification", "safety"} <= {c[0] for c in sent}
+    assert "image-classification" not in {c[0] for c in sent}
+    kids = await _children(client, admin_headers, body["id"])
+    image = kids[
+        next(s["task_id"] for s in body["steps"] if s["step"] == "image_classification")
+    ]
+    assert image["status"] == "error" and "screenshot" in image["error"]
+
+
+async def test_the_image_step_needs_its_worker(client, admin_headers, project, sent):
+    services = (await client.get("/api/v1/services", headers=admin_headers)).json()[
+        "items"
+    ]
+    worker = next(s for s in services if s["name"] == "image-classification")
+    await client.delete(f"/api/v1/services/{worker['id']}", headers=admin_headers)
+    file = await upload(client, admin_headers)
+    resp = await run(client, admin_headers, project, file_ids=[file["id"]])
+    assert resp.status_code == 409 and "image-classification" in resp.json()["detail"]
+    assert sent == []
+    # A text run, or a file without the image step, does not need it.
+    assert (await run(client, admin_headers, project, text="x")).status_code == 201
+    ok = await run(
+        client, admin_headers, project, file_ids=[file["id"]], classify_images=False
+    )
+    assert ok.status_code == 201
