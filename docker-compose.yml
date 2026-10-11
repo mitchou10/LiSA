@@ -229,6 +229,27 @@ services:
     networks:
       - lisa
 
+  classification:
+    image: lisa-service-classification:v0.4.0
+    container_name: lisa-classification
+    build:
+      context: .
+      dockerfile: services/classification/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LISA_API_URL: http://server:8000
+      LISA_SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-service-token}
+      CELERY_QUEUE: ${CLASSIFICATION_QUEUE:-classification}
+      CLASSIFIER_BACKEND: ${CLASSIFIER_BACKEND:-gliner2}
+      CLASSIFIER_MODEL: ${CLASSIFIER_MODEL:-fastino/gliner2.5-multi-v1}
+    depends_on:
+      redis:
+        condition: service_healthy
+      server:
+        condition: service_started
+    networks:
+      - lisa
+
   parser:
     image: lisa-service-parser:v0.4.0
     container_name: lisa-parser
