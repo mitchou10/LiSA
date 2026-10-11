@@ -1,9 +1,10 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 
 from app.api.deps import AdminDep, CurrentUserDep, TaskServiceDep
+from app.core import storage
 from app.models.enums import TaskStatus
 from app.schemas.pagination import Page
 from app.schemas.task import TaskRead, TaskStatusRead, TaskSubmit, TaskUpdate
@@ -57,6 +58,39 @@ async def get_task(
 ) -> TaskRead:
     obj = await service.get(task_id)
     return TaskRead.model_validate(obj)
+
+
+@router.get("/{task_id}/pages/{page_number}/image")
+async def get_page_image(
+    task_id: UUID, page_number: int, service: TaskServiceDep, user: CurrentUserDep
+) -> Response:
+    """The screenshot of a page parsed by task ``task_id`` (a parser task).
+
+    Only the key found in the task's own output is read from storage, never a
+    key given by the caller, and only for the task's owner or an admin.
+    """
+    task = await service.get(task_id)
+    # Same answer for "missing" and "not yours": do not reveal existence.
+    if not (user.is_admin or task.user_id == user.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found.")
+    pages = (task.output_data or {}).get("pages") or []
+    key = next(
+        (p.get("s3_key") for p in pages if p.get("page_number") == page_number), None
+    )
+    if not key:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Page not found.")
+    try:
+        data = await storage.get_object(key)
+    except storage.ObjectNotFoundError:
+        raise HTTPException(
+            status.HTTP_410_GONE, "The page image was deleted from storage."
+        ) from None
+    return Response(
+        content=data,
+        media_type="image/png",
+        # Private to the user, but fine to keep for the session.
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @router.get("/{task_id}/status", response_model=TaskStatusRead)

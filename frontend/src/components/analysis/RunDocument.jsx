@@ -1,0 +1,316 @@
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ChevronLeft, ChevronRight, ImageOff, Loader2 } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { usePageImage } from "../../hooks/usePageImage";
+import { buildPages, colorFor, segments } from "../../lib/runModel";
+import { cn } from "../../lib/utils";
+import { useI18n } from "../../lib/i18n.jsx";
+
+const HEAD_COLOR = "hsl(215 80% 50%)";
+const TAIL_COLOR = "hsl(285 70% 50%)";
+const pct = (n) => (n == null ? "" : `${Math.round(n * 100)}%`);
+
+// Every highlight of a page, as one list: what to draw, where, in what colour.
+function highlights(page, layers) {
+  const out = [];
+  if (layers.entities)
+    for (const e of page.entities)
+      out.push({
+        id: e.id,
+        kind: "entity",
+        title: `${e.label} · ${e.category} · ${e.action} · ${pct(e.score)}`,
+        text: e.text,
+        label: e.label,
+        color: colorFor(e.category),
+        flagged: e.flagged,
+        start: e.start,
+        end: e.end,
+        bboxes: e.bboxes,
+      });
+  if (layers.relations)
+    for (const r of page.relations)
+      for (const [side, end, color] of [
+        ["head", r.head, HEAD_COLOR],
+        ["tail", r.tail, TAIL_COLOR],
+      ])
+        out.push({
+          id: `${r.id}-${side}`,
+          relationId: r.id,
+          kind: "relation",
+          title: `${r.head.text} — ${r.relation} → ${r.tail.text} (${side})`,
+          text: end.text,
+          color,
+          start: end.start,
+          end: end.end,
+          bboxes: end.bboxes,
+        });
+  return out;
+}
+
+/** The page screenshot with the boxes of every highlight drawn on it. */
+function PageImage({ page, items, activeId, onActive }) {
+  const { t } = useI18n();
+  const { url, error, loading } = usePageImage(page.image);
+
+  if (loading)
+    return (
+      <div className="flex h-48 items-center justify-center rounded-lg border border-border">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  if (error)
+    return (
+      <div className="flex h-24 items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+        <ImageOff className="h-4 w-4" />
+        {error === "gone" ? t("run.doc.imageGone") : error}
+      </div>
+    );
+  if (!url) return null;
+  return (
+    <div className="relative overflow-hidden rounded-lg border border-border">
+      <img src={url} alt={`${t("run.page")} ${page.number}`} className="block w-full" />
+      {items.flatMap((h) =>
+        h.bboxes.map((b, i) => (
+          <button
+            type="button"
+            key={`${h.id}-${i}`}
+            title={h.title}
+            onMouseEnter={() => onActive(h.id)}
+            onMouseLeave={() => onActive(null)}
+            className={cn(
+              "absolute rounded-[2px] border-2 transition-all",
+              h.kind === "relation" && "border-dashed",
+              activeId === h.id && "z-10 ring-2 ring-offset-1"
+            )}
+            style={{
+              left: `${b.x * 100}%`,
+              top: `${b.y * 100}%`,
+              width: `${b.width * 100}%`,
+              height: `${b.height * 100}%`,
+              borderColor: h.color,
+              backgroundColor: `color-mix(in srgb, ${h.color} ${
+                activeId === h.id ? 35 : 15
+              }%, transparent)`,
+              "--tw-ring-color": h.color,
+            }}
+          />
+        ))
+      )}
+    </div>
+  );
+}
+
+/** The page text with the spans marked: entities highlighted, relation ends underlined. */
+function PageText({ page, items, activeId, onActive }) {
+  const { t } = useI18n();
+  const parts = useMemo(() => segments(page.content, items), [page.content, items]);
+  if (!page.content.trim())
+    return <p className="text-sm text-muted-foreground">{t("run.doc.noText")}</p>;
+  return (
+    <p className="whitespace-pre-wrap rounded-lg border border-border bg-background/40 p-3 text-sm leading-relaxed">
+      {parts.map((part) => {
+        if (part.spans.length === 0) return part.text;
+        const entity = part.spans.find((s) => s.kind === "entity");
+        const relation = part.spans.find((s) => s.kind === "relation");
+        const active = part.spans.some((s) => s.id === activeId);
+        return (
+          <mark
+            key={part.start}
+            title={part.spans.map((s) => s.title).join("\n")}
+            onMouseEnter={() => onActive(part.spans[0].id)}
+            onMouseLeave={() => onActive(null)}
+            className="rounded-[3px] px-0.5 text-foreground"
+            style={{
+              backgroundColor: entity
+                ? `color-mix(in srgb, ${entity.color} ${active ? 45 : 22}%, transparent)`
+                : "transparent",
+              textDecoration: relation ? "underline" : "none",
+              textDecorationColor: relation?.color,
+              textDecorationThickness: "2px",
+              textUnderlineOffset: "3px",
+            }}
+          >
+            {part.text}
+          </mark>
+        );
+      })}
+    </p>
+  );
+}
+
+function Side({ page, activeId, onActive, layers, t }) {
+  return (
+    <div className="space-y-4">
+      {layers.entities && (
+        <div className="space-y-1.5">
+          <div className="text-sm font-medium">
+            {t("run.step.ner")} ({page.entities.length})
+          </div>
+          {page.entities.length === 0 && (
+            <p className="text-xs text-muted-foreground">{t("run.nothing")}</p>
+          )}
+          <ul className="space-y-1">
+            {page.entities.map((e) => (
+              <li
+                key={e.id}
+                onMouseEnter={() => onActive(e.id)}
+                onMouseLeave={() => onActive(null)}
+                className={cn(
+                  "flex items-center gap-2 rounded-md border border-transparent px-2 py-1 text-sm",
+                  activeId === e.id && "border-border bg-muted"
+                )}
+              >
+                <span
+                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: colorFor(e.category) }}
+                />
+                <span className="min-w-0 flex-1 truncate font-medium">{e.text}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">{e.label}</span>
+                <Badge variant={e.action === "block" ? "destructive" : "muted"}>
+                  {t(`sensitive.action.${e.action}`)}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {layers.relations && (
+        <div className="space-y-1.5">
+          <div className="text-sm font-medium">
+            {t("run.step.relation")} ({page.relations.length})
+          </div>
+          {page.relations.length === 0 && (
+            <p className="text-xs text-muted-foreground">{t("run.nothing")}</p>
+          )}
+          <ul className="space-y-1">
+            {page.relations.map((r) => (
+              <li
+                key={r.id}
+                onMouseEnter={() => onActive(`${r.id}-head`)}
+                onMouseLeave={() => onActive(null)}
+                className={cn(
+                  "flex flex-wrap items-center gap-1.5 rounded-md border border-transparent px-2 py-1 text-sm",
+                  activeId?.startsWith(r.id) && "border-border bg-muted"
+                )}
+              >
+                <span className="font-medium" style={{ color: HEAD_COLOR }}>
+                  {r.head.text}
+                </span>
+                <span className="text-xs text-muted-foreground">— {r.relation} →</span>
+                <span className="font-medium" style={{ color: TAIL_COLOR }}>
+                  {r.tail.text}
+                </span>
+                <span className="text-xs text-muted-foreground">{pct(r.score)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The analysed document, page by page: the screenshot with the boxes of what
+ * was found (files), the text with the spans marked, the safety verdict and
+ * the classification of the page. Hovering a highlight, in the image, the text
+ * or the list, lights it up everywhere.
+ */
+export default function RunDocument({ run, source }) {
+  const { t } = useI18n();
+  const pages = useMemo(() => buildPages(run, source), [run, source]);
+  const [index, setIndex] = useState(0);
+  const [layers, setLayers] = useState({ entities: true, relations: true });
+  const [activeId, setActiveId] = useState(null);
+
+  // A new run starts on its first page.
+  const runId = run?.id;
+  useEffect(() => setIndex(0), [runId]);
+
+  const page = pages[Math.min(index, pages.length - 1)];
+  const items = useMemo(() => (page ? highlights(page, layers) : []), [page, layers]);
+  if (!page) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center gap-3">
+          <CardTitle>{t("run.doc.title")}</CardTitle>
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              size="icon"
+              variant="outline"
+              disabled={index === 0}
+              onClick={() => setIndex(index - 1)}
+              aria-label="←"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm tabular-nums">
+              {t("run.page")} {index + 1} / {pages.length}
+            </span>
+            <Button
+              size="icon"
+              variant="outline"
+              disabled={index >= pages.length - 1}
+              onClick={() => setIndex(index + 1)}
+              aria-label="→"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        <CardDescription className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {[
+            ["entities", "run.step.ner"],
+            ["relations", "run.step.relation"],
+          ].map(([layer, key]) => (
+            <label key={layer} className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={layers[layer]}
+                onChange={(e) => setLayers({ ...layers, [layer]: e.target.checked })}
+              />
+              {t(key)}
+            </label>
+          ))}
+          {page.filename && <span>· {page.filename}</span>}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          {page.unsafe && (
+            <Badge variant="destructive" className="gap-1">
+              <AlertTriangle className="h-3 w-3" />
+              {t("run.unsafe")}
+            </Badge>
+          )}
+          {page.safety
+            .flatMap((check) => check.labels.filter((l) => l.flagged))
+            .map((l) => (
+              <Badge key={l.label} variant="destructive">
+                {l.label} {pct(l.score)}
+              </Badge>
+            ))}
+          {page.classifications.map((c) => (
+            <Badge key={c.name} variant="muted">
+              {c.name}: {c.labels.length ? c.labels.join(", ") : t("run.noLabel")}
+            </Badge>
+          ))}
+        </div>
+
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <div className="space-y-3">
+            {page.image && (
+              <PageImage page={page} items={items} activeId={activeId} onActive={setActiveId} />
+            )}
+            <PageText page={page} items={items} activeId={activeId} onActive={setActiveId} />
+          </div>
+          <Side page={page} activeId={activeId} onActive={setActiveId} layers={layers} t={t} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

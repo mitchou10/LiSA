@@ -348,6 +348,9 @@ export const translations = {
     "run.noLabel": "no label",
     "run.safe": "No safety issue found",
     "run.unsafe": "Safety issue found",
+    "run.doc.title": "Document",
+    "run.doc.imageGone": "The page image was deleted from storage.",
+    "run.doc.noText": "No text on this page.",
   },
   fr: {
     "app.subtitle": "Détection de jailbreak & prompt injection — supervision",
@@ -696,6 +699,9 @@ export const translations = {
     "run.noLabel": "aucun label",
     "run.safe": "Aucun problème de sécurité",
     "run.unsafe": "Problème de sécurité détecté",
+    "run.doc.title": "Document",
+    "run.doc.imageGone": "L'image de la page a été supprimée du stockage.",
+    "run.doc.noText": "Aucun texte sur cette page.",
   },
 };
 
