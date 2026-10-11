@@ -22,8 +22,10 @@ class Settings(BaseSettings):
     AWS_S3_ENDPOINT_URL: str = os.getenv("AWS_S3_ENDPOINT_URL", "")
     # Gaussian blur radius for page images, in pixels:
     # max(BLUR_MIN_RADIUS, smallest image side * BLUR_RATIO).
-    BLUR_MIN_RADIUS: float = float(os.getenv("BLUR_MIN_RADIUS", "20"))
-    BLUR_RATIO: float = float(os.getenv("BLUR_RATIO", "0.03"))
+    # Same calibration as the parser: ~8 px on a 1240 px page keeps the layout
+    # visible and the text unreadable.
+    BLUR_MIN_RADIUS: float = float(os.getenv("BLUR_MIN_RADIUS", "4"))
+    BLUR_RATIO: float = float(os.getenv("BLUR_RATIO", "0.007"))
 
 
 settings = Settings()

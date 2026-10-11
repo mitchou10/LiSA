@@ -30,8 +30,11 @@ class Settings(BaseSettings):
     # ``blur_screenshots`` input). Gaussian radius, in pixels:
     # max(BLUR_MIN_RADIUS, smallest image side * BLUR_RATIO).
     BLUR_SCREENSHOTS: bool = True
-    BLUR_MIN_RADIUS: float = 20.0
-    BLUR_RATIO: float = 0.03
+    # Calibrated on a 150 dpi A4 page (1240 px wide): a radius of ~8 px keeps the
+    # layout (lines, blocks, tables) visible while the text is unreadable, even
+    # to OCR (3 px is still partly legible). The radius follows the page width.
+    BLUR_MIN_RADIUS: float = 4.0
+    BLUR_RATIO: float = 0.007
 
     # Delete the source file from the bucket as soon as it has been read, so
     # only the extracted text / boxes / screenshots remain.
