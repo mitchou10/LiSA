@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { textToPages } from "../lib/runModel";
 import { Link, useSearchParams } from "react-router-dom";
 import { FileText, FileUp, Loader2, Play } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Textarea } from "../components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import RunDocument from "../components/analysis/RunDocument";
 import RunResults from "../components/analysis/RunResults";
 import { useProjectRun } from "../hooks/useProjectRun";
 import { DEFINITION_KINDS, getDefinitions, getProjects, uploadFile } from "../lib/api";
@@ -105,6 +107,8 @@ export default function AnalysisPage() {
   const [blur, setBlur] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [formError, setFormError] = useState(null);
+  // What was sent: a text is cut into pages here, files come back from the parser.
+  const [sent, setSent] = useState(null);
 
   useEffect(() => {
     getProjects()
@@ -162,7 +166,9 @@ export default function AnalysisPage() {
       );
       if (source === "text") {
         body.text = text;
+        setSent({ kind: "text", pages: textToPages(text) });
       } else {
+        setSent({ kind: "files" });
         setUploading(true);
         const uploaded = [];
         for (const file of files) uploaded.push(await uploadFile(file));
@@ -196,6 +202,7 @@ export default function AnalysisPage() {
     );
 
   return (
+    <div className="space-y-6">
     <div className="grid gap-6 lg:grid-cols-2">
       <Card>
         <CardHeader>
@@ -317,6 +324,8 @@ export default function AnalysisPage() {
           )}
         </CardContent>
       </Card>
+    </div>
+    {run && <RunDocument run={run} source={sent} />}
     </div>
   );
 }

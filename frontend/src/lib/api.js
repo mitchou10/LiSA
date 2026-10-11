@@ -254,3 +254,18 @@ export async function uploadFile(file) {
 //         classification_ids?, safety_ids? }
 export const startRun = (projectId, body) =>
   request(`/projects/${projectId}/runs`, json("POST", body));
+
+// The screenshot of a page parsed by a parser task, as a blob URL (the caller
+// revokes it). 410 means the image was deleted from storage.
+export async function fetchPageImage(parserTaskId, pageNumber) {
+  const res = await fetch(
+    `${API_V1}/tasks/${parserTaskId}/pages/${pageNumber}/image`,
+    { credentials: "include" }
+  );
+  if (!res.ok) {
+    const error = new Error(`${res.status} ${res.statusText}`);
+    error.status = res.status;
+    throw error;
+  }
+  return URL.createObjectURL(await res.blob());
+}
