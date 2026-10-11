@@ -39,6 +39,8 @@ jobs:
       worker: ${{ steps.filter.outputs.worker }}
       anonymize: ${{ steps.filter.outputs.anonymize }}
       classification: ${{ steps.filter.outputs.classification }}
+      ner: ${{ steps.filter.outputs.ner }}
+      relation: ${{ steps.filter.outputs.relation }}
       safety: ${{ steps.filter.outputs.safety }}
       services: ${{ steps.filter.outputs.services }}
       helm: ${{ steps.filter.outputs.helm }}
@@ -67,8 +69,12 @@ jobs:
             safety:
               - 'services/safety/**'
               - 'worker/**'
-            gliner:
-              - 'services/gliner/**'
+            ner:
+              - 'services/ner/**'
+              - 'worker/**'
+            relation:
+              - 'services/relation/**'
+              - 'worker/**'
             parser:
               - 'services/parser/**'
             classification:
@@ -90,7 +96,8 @@ jobs:
           WORKER: ${{ steps.filter.outputs.worker }}
           ANONYMIZE: ${{ steps.filter.outputs.anonymize }}
           SAFETY: ${{ steps.filter.outputs.safety }}
-          GLINER: ${{ steps.filter.outputs.gliner }}
+          NER: ${{ steps.filter.outputs.ner }}
+          RELATION: ${{ steps.filter.outputs.relation }}
           PARSER: ${{ steps.filter.outputs.parser }}
           CLASSIFICATION: ${{ steps.filter.outputs.classification }}
           CI: ${{ steps.filter.outputs.ci }}
@@ -112,8 +119,8 @@ jobs:
           if [ "$SAFETY" = "true" ] || [ "$WORKER" = "true" ] || [ "$CI" = "true" ]; then
             add '{"name":"safety","context":".","dockerfile":"services/safety/Dockerfile"}'
           fi
-          if [ "$GLINER" = "true" ] || [ "$WORKER" = "true" ] || [ "$CI" = "true" ]; then
-            add '{"name":"gliner","context":".","dockerfile":"services/gliner/Dockerfile"}'
+          if [ "$NER" = "true" ] || [ "$WORKER" = "true" ] || [ "$CI" = "true" ]; then
+            add '{"name":"ner","context":".","dockerfile":"services/ner/Dockerfile"}'
           fi
           if [ "$PARSER" = "true" ] || [ "$WORKER" = "true" ] || [ "$CI" = "true" ]; then
             add '{"name":"parser","context":".","dockerfile":"services/parser/Dockerfile"}'
@@ -121,6 +128,10 @@ jobs:
 
           if [ "$CLASSIFICATION" = "true" ] || [ "$WORKER" = "true" ] || [ "$CI" = "true" ]; then
             add '{"name":"classification","context":".","dockerfile":"services/classification/Dockerfile"}'
+          fi
+
+          if [ "$RELATION" = "true" ] || [ "$WORKER" = "true" ] || [ "$CI" = "true" ]; then
+            add '{"name":"relation","context":".","dockerfile":"services/relation/Dockerfile"}'
           fi
 
           echo "Images to build: $IMAGES"
@@ -185,7 +196,7 @@ jobs:
     needs:
       - path-filter
       - expose-vars
-    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.anonymize == 'true' || needs.path-filter.outputs.classification == 'true' || needs.path-filter.outputs.safety == 'true' || needs.path-filter.outputs.ci == 'true' }}
+    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.anonymize == 'true' || needs.path-filter.outputs.classification == 'true' || needs.path-filter.outputs.safety == 'true' || needs.path-filter.outputs.ner == 'true' || needs.path-filter.outputs.relation == 'true' || needs.path-filter.outputs.ci == 'true' }}
     permissions:
       contents: read
     with:

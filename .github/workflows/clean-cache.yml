@@ -83,7 +83,8 @@ jobs:
         - backend
         - anonymize
         - safety
-        - gliner
+        - ner
+        - relation
         - parser
         - classification
     with:
@@ -103,7 +104,8 @@ jobs:
         - backend
         - anonymize
         - safety
-        - gliner
+        - ner
+        - relation
         - parser
         - classification
     with:
