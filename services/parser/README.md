@@ -7,8 +7,9 @@ PDF text extraction, Tesseract OCR only where a page has no text layer.
 - Service name: `liteparse-ocr` (type `other`), queue `liteparse-ocr`.
 - It reads the file, extracts the text and boxes, and takes the screenshots.
   Detection and anonymization happen in other services.
-- Defaults: screenshots are **blurred** (irreversibly, text is unreadable even
-  to OCR; the readable pixels are never stored), the source file is **deleted
+- Defaults: screenshots are **blurred** (the text is unreadable, OCR included,
+  while lines, blocks and tables stay visible; the readable pixels are never
+  stored), the source file is **deleted
   as soon as it has been read**, and the text and boxes are kept **in clear**.
 - Input: `{"files": [{"s3_key", "filename", "mime"}], "blur_screenshots": true}`.
   `s3_key` is the key of the file in the bucket (`S3_BUCKET`), e.g. the
@@ -38,7 +39,7 @@ PDF text extraction, Tesseract OCR only where a page has no text layer.
 | `S3_ENDPOINT_URL` / `S3_REGION` | – | S3 endpoint (RustFS: `http://rustfs:9000`) and region |
 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | – | Object storage credentials |
 | `BLUR_SCREENSHOTS` | `true` | Blur the screenshots by default |
-| `BLUR_MIN_RADIUS` / `BLUR_RATIO` | `20` / `0.03` | Gaussian blur radius (px): max(min, smallest side x ratio) |
+| `BLUR_MIN_RADIUS` / `BLUR_RATIO` | `4` / `0.007` | Gaussian blur radius (px): max(min, smallest side x ratio), ~8 px on a 1240 px page. Layout stays visible, text becomes unreadable (OCR included); under ~4 px it can be legible again |
 | `DELETE_SOURCE_AFTER_PARSE` | `true` | Delete the source file from storage right after reading it |
 | `CELERY_QUEUE` | `liteparse-ocr` | Queue consumed |
 
