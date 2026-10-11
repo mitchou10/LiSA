@@ -191,7 +191,7 @@ class AnonymizeService(BaseService):
                 )
                 progress = round((index + 1) / total * 100)
                 self.update_task(task_id, progress=progress)
-        except Exception as exc:  # noqa: BLE001 - mark the task failed and re-raise
+        except Exception as exc:
             self.update_task(task_id, status=TaskStatus.ERROR, error=str(exc))
             raise
 

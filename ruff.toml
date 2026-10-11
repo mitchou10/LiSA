@@ -1,0 +1,13 @@
+# Shared by worker/ and services/ (backend/ has its own [tool.ruff] in its pyproject).
+line-length = 88
+target-version = "py311"
+
+[lint]
+ignore = [
+    # Services override class-level metadata (tags, schemas) in subclasses by design.
+    "RUF012",
+    # `__enter__` returning the concrete class is fine; no Self backport needed.
+    "PYI034",
+    # Readability: long annotated label lists are joined on purpose.
+    "FLY002",
+]

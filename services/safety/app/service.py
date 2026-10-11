@@ -89,9 +89,9 @@ class SafetyService(BaseService):
         if self._scanners:
             return self._scanners
 
-        enabled = set(
+        enabled = {
             s.strip().lower() for s in config.ENABLED_SCANNERS.split(",") if s.strip()
-        )
+        }
 
         if "prompt_injection" in enabled:
             self._scanners["prompt_injection"] = PromptInjection()
@@ -246,7 +246,7 @@ class SafetyService(BaseService):
                 )
                 progress = round((index + 1) / total * 100)
                 self.update_task(task_id, progress=progress)
-        except Exception as exc:  # noqa: BLE001 - mark the task failed and re-raise
+        except Exception as exc:
             self.update_task(task_id, status=TaskStatus.ERROR, error=str(exc))
             raise
 

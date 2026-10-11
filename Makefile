@@ -10,12 +10,14 @@ help: ## Show this help
 install: ## Install backend dependencies (with dev extras)
 	cd $(BACKEND_DIR) && python -m pip install -e ".[dev]"
 
-lint: install ## Run ruff linter
+lint: install ## Run ruff (check + format check) on backend, worker and services
 	@echo "Running ruff..."
-	cd $(BACKEND_DIR) && ruff check .
+	cd $(BACKEND_DIR) && ruff check . && ruff format --check .
+	ruff check worker services && ruff format --check worker services
 
 format: install ## Auto-format code with ruff
 	cd $(BACKEND_DIR) && ruff format . && ruff check --fix .
+	ruff format worker services && ruff check --fix worker services
 
 run-test: install ## Install dependencies and run unit tests
 	cd $(BACKEND_DIR) && pytest -q

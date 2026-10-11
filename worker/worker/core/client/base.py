@@ -49,7 +49,7 @@ class BaseClient:
         if self._owns_client:
             self._client.close()
 
-    def __enter__(self) -> "BaseClient":
+    def __enter__(self) -> BaseClient:
         return self
 
     def __exit__(self, *_exc: object) -> None:

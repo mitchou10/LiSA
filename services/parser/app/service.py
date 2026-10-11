@@ -246,7 +246,7 @@ class ParserService(BaseService):
             try:
                 result = parser.parse(tmp.name)
                 shots = {s.page_num: s for s in parser.screenshot(tmp.name)}
-            except Exception as exc:  # noqa: BLE001 - surface a clean message
+            except Exception as exc:
                 raise ParserError(f"Cannot parse '{filename}': {exc}") from exc
 
         pages: list[dict[str, Any]] = []
@@ -263,7 +263,8 @@ class ParserService(BaseService):
                     "filename": filename,
                     "source_page": parsed.page_num,
                     "image": (
-                        "data:image/png;base64," + base64.b64encode(image_bytes).decode()
+                        "data:image/png;base64,"
+                        + base64.b64encode(image_bytes).decode()
                         if image_bytes
                         else None
                     ),
@@ -274,8 +275,14 @@ class ParserService(BaseService):
         return pages
 
     def process(self, input_data: Any, task_id: str | None = None) -> dict[str, Any]:
-        files = (input_data or {}).get("files") if isinstance(input_data, dict) else None
-        blur = bool(input_data.get("blur_screenshots")) if isinstance(input_data, dict) else False
+        files = (
+            (input_data or {}).get("files") if isinstance(input_data, dict) else None
+        )
+        blur = (
+            bool(input_data.get("blur_screenshots"))
+            if isinstance(input_data, dict)
+            else False
+        )
         self.update_task(task_id, status=TaskStatus.RUNNING, progress=0)
         try:
             if not files:
@@ -284,19 +291,30 @@ class ParserService(BaseService):
             for index, f in enumerate(files):
                 data = _decode(f.get("data_base64", ""))
                 for page in self.parse_file(
-                    f.get("filename") or f"file-{index + 1}", f.get("mime"), data, blur=blur
+                    f.get("filename") or f"file-{index + 1}",
+                    f.get("mime"),
+                    data,
+                    blur=blur,
                 ):
                     page["page_number"] = len(pages) + 1
                     pages.append(page)
-                self.update_task(task_id, progress=round((index + 1) / len(files) * 100))
-        except Exception as exc:  # noqa: BLE001 - mark the task failed and re-raise
+                self.update_task(
+                    task_id, progress=round((index + 1) / len(files) * 100)
+                )
+        except Exception as exc:
             self._scrub_input(task_id, files)
             self.update_task(task_id, status=TaskStatus.ERROR, error=str(exc))
             raise
 
-        result = {"id": task_id or f"parser-{uuid.uuid4()}", "pages": pages, "error": None}
+        result = {
+            "id": task_id or f"parser-{uuid.uuid4()}",
+            "pages": pages,
+            "error": None,
+        }
         self._scrub_input(task_id, files)
-        self.update_task(task_id, status=TaskStatus.SUCCESS, progress=100, output_data=result)
+        self.update_task(
+            task_id, status=TaskStatus.SUCCESS, progress=100, output_data=result
+        )
         return result
 
     def _scrub_input(self, task_id: str | None, files: Any) -> None:

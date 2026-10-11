@@ -167,5 +167,7 @@ async def test_requires_authentication(client):
 async def test_non_admin_can_read_but_not_write(client):
     headers = await _headers(client, "bob", "bobpass1")
     assert (await client.get(URL, headers=headers)).status_code == 200
-    resp = await client.post(URL + "/versions", json={"config": _config()}, headers=headers)
+    resp = await client.post(
+        URL + "/versions", json={"config": _config()}, headers=headers
+    )
     assert resp.status_code == 403

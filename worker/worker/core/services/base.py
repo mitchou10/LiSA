@@ -152,7 +152,7 @@ class BaseService(ABC):
             self._client.close()
             self._tasks.close()
 
-    def __enter__(self) -> "BaseService":
+    def __enter__(self) -> BaseService:
         self.register()
         return self
 
