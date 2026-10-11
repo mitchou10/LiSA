@@ -6,6 +6,8 @@ task ends: ``feed`` turns the finished task into the waiter's real input.
 
 * ``pages``: the parser's pages (text, boxes, screenshot key) for the analysis
   workers (ner, relation, classification, safety).
+* ``images``: only the screenshot key of each parsed page, for the image
+  classification worker (no text: nothing readable is copied to its row).
 * ``anonymize``: the pages and the flagged entities found by the ner task, for
   the anonymize worker.
 """
@@ -88,6 +90,20 @@ def feed(
         if not pages:
             raise CannotFeed("The parser found no page.")
         payload["pages"] = pages
+    elif kind == "images":
+        if finished.status != TaskStatus.SUCCESS:
+            raise CannotFeed(
+                f"The parser did not finish ({finished.status.value}): "
+                f"{finished.error or 'no details'}"
+            )
+        screenshots = [
+            {"page_number": page.get("page_number"), "s3_key": page["s3_key"]}
+            for page in (output or {}).get("pages") or []
+            if page.get("s3_key")
+        ]
+        if not screenshots:
+            raise CannotFeed("The parser produced no page screenshot to classify.")
+        payload["pages"] = screenshots
     elif kind == "anonymize":
         if finished.status != TaskStatus.SUCCESS:
             raise CannotFeed(
