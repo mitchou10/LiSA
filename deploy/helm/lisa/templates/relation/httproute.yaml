@@ -1,0 +1,117 @@
+{{- if .Values.enabled }}
+{{- if .Values.relation.httpRoute.enabled -}}
+{{- $fullNameApp := include "helper.componentFullname" (dict "root" . "componentName" "relation") -}}
+{{- $svcPortApp := .Values.relation.service.port -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "relation") }}
+  labels: {{- (include "helper.labels" (dict "root" . "componentName" "relation")) | nindent 4 }}
+  {{- if .Values.relation.httpRoute.labels }}
+    {{- toYaml .Values.relation.httpRoute.labels | nindent 4 }}
+  {{- end }}
+  {{- if .Values.relation.httpRoute.annotations }}
+  annotations:
+    {{- tpl (toYaml .Values.relation.httpRoute.annotations) . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.relation.httpRoute.parentRefs }}
+  parentRefs:
+  {{- range .Values.relation.httpRoute.parentRefs }}
+  - name: {{ .name }}
+    {{- if .namespace }}
+    namespace: {{ .namespace }}
+    {{- end }}
+    {{- if .sectionName }}
+    sectionName: {{ .sectionName }}
+    {{- end }}
+    {{- if .port }}
+    port: {{ .port }}
+    {{- end }}
+    {{- if .group }}
+    group: {{ .group }}
+    {{- end }}
+    {{- if .kind }}
+    kind: {{ .kind }}
+    {{- end }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.relation.httpRoute.hostnames }}
+  hostnames:
+  {{- range .Values.relation.httpRoute.hostnames }}
+  - {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.relation.httpRoute.rules }}
+  rules:
+  {{- range .Values.relation.httpRoute.rules }}
+  {{- if .matches }}
+  - matches:
+    {{- range .matches }}
+    {{- if .path }}
+    - path:
+        type: {{ .path.type | default "PathPrefix" }}
+        value: {{ .path.value | default "/" }}
+    {{- end }}
+      {{- if .headers }}
+      headers:
+      {{- range .headers }}
+      - type: {{ .type | default "Exact" }}
+        name: {{ .name }}
+        value: {{ .value }}
+      {{- end }}
+      {{- end }}
+      {{- if .queryParams }}
+      queryParams:
+      {{- range .queryParams }}
+      - type: {{ .type | default "Exact" }}
+        name: {{ .name }}
+        value: {{ .value }}
+      {{- end }}
+      {{- end }}
+      {{- if .method }}
+      method: {{ .method }}
+      {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- if .filters }}
+    filters:
+    {{- toYaml .filters | nindent 4 }}
+    {{- end }}
+    {{- if .relationRefs }}
+    relationRefs:
+    {{- range .relationRefs }}
+    - name: {{ .name | default $fullNameApp }}
+      port: {{ .port | default $svcPortApp }}
+      {{- if .weight }}
+      weight: {{ .weight }}
+      {{- end }}
+      {{- if .group }}
+      group: {{ .group }}
+      {{- end }}
+      {{- if .kind }}
+      kind: {{ .kind }}
+      {{- end }}
+      {{- if .namespace }}
+      namespace: {{ .namespace }}
+      {{- end }}
+    {{- end }}
+    {{- else }}
+    relationRefs:
+    - name: {{ $fullNameApp }}
+      port: {{ $svcPortApp }}
+    {{- end }}
+  {{- end }}
+  {{- else }}
+  {{/* Default rule when no rules specified */}}
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: "/"
+    relationRefs:
+    - name: {{ $fullNameApp }}
+      port: {{ $svcPortApp }}
+  {{- end }}
+{{- end }}
+{{- end }}

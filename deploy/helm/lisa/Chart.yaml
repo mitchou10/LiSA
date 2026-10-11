@@ -1,6 +1,24 @@
 apiVersion: v2
 name: lisa
-description: LiSA - LLM Security Analyzer (backend, frontend, workers, postgres, redis)
 type: application
 version: 0.5.0
-appVersion: 0.5.0
+appVersion: "0.5.0"
+description: A Helm chart to deploy LiSA (LLM security analyzer).
+kubeVersion: ">=1.25.0-0"
+deprecated: false
+dependencies:
+  - name: redis
+    alias: redis
+    version: 0.27.9
+    repository: oci://registry-1.docker.io/cloudpirates
+    condition: redis.enabled
+  - name: postgres
+    alias: postgres
+    version: 0.19.6
+    repository: oci://registry-1.docker.io/cloudpirates
+    condition: postgres.enabled
+  - name: rustfs
+    alias: rustfs
+    version: 0.10.0
+    repository: oci://registry-1.docker.io/cloudpirates
+    condition: rustfs.enabled

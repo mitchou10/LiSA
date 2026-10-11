@@ -1,32 +1,60 @@
-LiSA has been deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+Release "{{ .Release.Name }}" has been deployed in namespace "{{ .Release.Namespace }}".
 
-Components:
-  - backend  : {{ include "lisa.fullname" . }}-backend  (port {{ .Values.backend.service.port }})
-  - frontend : {{ include "lisa.fullname" . }}-frontend (port {{ .Values.frontend.service.port }})
-{{- range .Values.workers }}
-{{- if .enabled }}
-  - worker   : {{ include "lisa.fullname" $ }}-worker-{{ .name }} (queue: {{ .queueName }}, replicas: {{ .replicaCount | default 1 }})
+================================================================================
+{{- if not .Values.enabled }}
+
+NOTE: `enabled` is false, so this release intentionally contains no resource.
+{{- else }}
+{{- range $componentName := list "backend" "frontend" "anonymize" "safety" "ner" "relation" "classification" "imageClassification" "parser" }}
+{{- $component := index $.Values $componentName }}
+{{- $fullname := include "helper.componentFullname" (dict "root" $ "componentName" $componentName) }}
+
+{{ $componentName }}:
+  Check rollout status:
+    kubectl rollout status {{ $component.deploymentType | lower }}/{{ $fullname }} -n {{ $.Release.Namespace }} -w
+
+  Follow logs in real-time:
+    kubectl logs -n {{ $.Release.Namespace }} -l app.kubernetes.io/name={{ $fullname }} -f
+{{- if $component.service.enabled }}
+
+  Port-forward to access the service locally:
+    kubectl port-forward -n {{ $.Release.Namespace }} svc/{{ $fullname }} 8080:{{ $component.service.port }}
+    Access at: http://localhost:8080
+{{- end }}
+{{- if $component.ingress.enabled }}
+
+  Ingress resources:
+    kubectl get ingress -n {{ $.Release.Namespace }} -l app.kubernetes.io/instance={{ $.Release.Name }},app.kubernetes.io/component={{ $componentName }}
+{{- end }}
+{{- if $component.metrics.enabled }}
+
+  Metrics enabled (ServiceMonitor):
+    kubectl get servicemonitor -n {{ $.Release.Namespace }} -l app.kubernetes.io/instance={{ $.Release.Name }},app.kubernetes.io/component={{ $componentName }}
 {{- end }}
 {{- end }}
-{{- if .Values.postgres.enabled }}
-  - postgres : {{ include "lisa.fullname" . }}-postgres (bundled)
+
+View all resources:
+  kubectl get all -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+{{- if .Values.jobs }}
+
+Jobs status:
+  kubectl get jobs -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+View specific job logs:
+  kubectl logs -n {{ .Release.Namespace }} -l app.kubernetes.io/component=<job-name> -f
 {{- end }}
-{{- if .Values.redis.enabled }}
-  - redis    : {{ include "lisa.fullname" . }}-redis (bundled)
+
+{{- if .Values.cronjobs }}
+
+CronJobs status:
+  kubectl get cronjobs -n {{ .Release.Namespace }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+View last CronJob run:
+  kubectl describe cronjob <cronjob-name> -n {{ .Release.Namespace }}
 {{- end }}
 
-Access locally with port-forward:
-
-  # Frontend (open http://localhost:8080)
-  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "lisa.fullname" . }}-frontend 8080:{{ .Values.frontend.service.port }}
-
-  # Backend API (the SPA expects it on http://localhost:8000)
-  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "lisa.fullname" . }}-backend 8000:{{ .Values.backend.service.port }}
-
-Default admin login: {{ .Values.secrets.adminUsername }} / (value of ADMIN_PASSWORD)
-
-{{- if eq .Values.secrets.jwtSecret "change-me-in-production-with-a-long-random-secret" }}
-
-WARNING: you are using the default JWT_SECRET. Override secrets.jwtSecret and
-secrets.serviceToken before any real deployment.
 {{- end }}
+
+For more information and troubleshooting:
+  https://github.com/mitchou10/LiSA

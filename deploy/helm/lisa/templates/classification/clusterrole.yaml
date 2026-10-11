@@ -1,0 +1,10 @@
+{{- if .Values.enabled }}
+{{- if and .Values.classification.serviceAccount.enabled .Values.classification.serviceAccount.clusterRole.create .Values.classification.serviceAccount.clusterRole.rules }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "classification") }}
+  labels: {{- (include "helper.labels" (dict "root" . "componentName" "classification")) | nindent 4 }}
+rules: {{- toYaml .Values.classification.serviceAccount.clusterRole.rules | nindent 0 }}
+{{- end }}
+{{- end }}

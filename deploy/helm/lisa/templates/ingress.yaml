@@ -1,46 +1,53 @@
-{{- if .Values.ingress.enabled }}
-{{- $fullname := include "lisa.fullname" . }}
+{{- if .Values.enabled }}
+{{- if .Values.global.ingress.enabled -}}
+{{- $fullNameApp := include "helper.componentFullname" (dict "root" . "componentName" "global") -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ $fullname }}
-  labels:
-    {{- include "lisa.labels" . | nindent 4 }}
-  {{- with .Values.ingress.annotations }}
+  name: {{ include "helper.fullname" . }}
+  labels: {{- (include "helper.labels" (dict "root" . "componentName" "global")) | nindent 4 }}
+  {{- if .Values.global.ingress.labels }}
+    {{- toYaml .Values.global.ingress.labels | nindent 4 }}
+  {{- end }}
+  {{- if .Values.global.ingress.annotations }}
   annotations:
-    {{- toYaml . | nindent 4 }}
+    {{- tpl (toYaml .Values.global.ingress.annotations) . | nindent 4 }}
   {{- end }}
 spec:
-  {{- with .Values.ingress.className }}
-  ingressClassName: {{ . }}
+  {{- if .Values.global.ingress.className }}
+  ingressClassName: {{ .Values.global.ingress.className }}
   {{- end }}
-  {{- with .Values.ingress.tls }}
+  {{- if .Values.global.ingress.tls }}
   tls:
-    {{- toYaml . | nindent 4 }}
+  {{- range .Values.global.ingress.tls }}
+  - hosts:
+    {{- range .hosts }}
+    - {{ . | quote }}
+    {{- end }}
+    secretName: {{ .secretName | default (printf "%s-%s" $fullNameApp "tls") | quote }}
+  {{- end }}
   {{- end }}
   rules:
-    - host: {{ .Values.ingress.host | quote }}
-      http:
-        paths:
-          - path: /api
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullname }}-backend
-                port:
-                  number: {{ .Values.backend.service.port }}
-          - path: /health
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullname }}-backend
-                port:
-                  number: {{ .Values.backend.service.port }}
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ $fullname }}-frontend
-                port:
-                  number: {{ .Values.frontend.service.port }}
+  {{- range .Values.global.ingress.hosts }}
+  - host: {{ .name | quote }}
+    http:
+      paths:
+      {{- range .paths }}
+      - path: {{ .path | default "/" }}
+        pathType: {{ .pathType | default "Prefix" }}
+        backend:
+          service:
+          {{- /* Unlike `servicename.ingress`, this chart-level Ingress fans out to whichever
+          component Services the user names, so there is no sensible default backend - refusing to
+          render beats emitting a rule that points at a Service the chart never creates. */}}
+          {{- if and .backend .backend.serviceName }}
+            name: {{ .backend.serviceName }}
+            port:
+              number: {{ .backend.portNumber | default 80 }}
+          {{- else }}
+            {{- fail "global.ingress.hosts[].paths[].backend.serviceName is required: the chart-level ingress has no default backend service (use servicename.ingress to route to this chart's own service)" }}
+          {{- end }}
+      {{- end }}
+  {{- end }}
+{{- end }}
 {{- end }}

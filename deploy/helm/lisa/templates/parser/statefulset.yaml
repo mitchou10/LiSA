@@ -1,0 +1,25 @@
+{{- if .Values.enabled }}
+{{- if eq .Values.parser.deploymentType "StatefulSet" }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "parser") }}
+  labels: {{- include "helper.labels" (dict "root" . "componentName" "parser") | nindent 4 }}
+spec:
+  {{- if not .Values.parser.autoscaling.enabled }}
+  replicas: {{ .Values.parser.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ .Values.parser.revisionHistoryLimit | default 10 }}
+  selector:
+    matchLabels: {{- include "helper.selectorLabels" (dict "root" . "componentName" "parser") | nindent 6 }}
+  serviceName: {{ include "helper.componentFullname" (dict "root" . "componentName" "parser") }}
+  {{- with .Values.parser.updateStrategy }}
+  updateStrategy: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    {{- include "helper.component.podTemplate" (dict "root" . "name" "parser" "component" .Values.parser) | nindent 4 }}
+  {{- if or .Values.parser.volumeClaims .Values.parser.extraVolumeClaims }}
+  volumeClaimTemplates: {{- toYaml (concat (default (list) .Values.parser.volumeClaims) (default (list) .Values.parser.extraVolumeClaims)) | nindent 2 }}
+  {{- end }}
+{{- end }}
+{{- end }}

@@ -1,0 +1,18 @@
+{{- if .Values.enabled }}
+{{- if eq .Values.imageClassification.deploymentType "DaemonSet" }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "imageClassification") }}
+  labels: {{- (include "helper.labels" (dict "root" . "componentName" "imageClassification")) | nindent 4 }}
+spec:
+  revisionHistoryLimit: {{ .Values.imageClassification.revisionHistoryLimit | default 10 }}
+  selector:
+    matchLabels: {{- include "helper.selectorLabels" (dict "root" . "componentName" "imageClassification") | nindent 6 }}
+  {{- with .Values.imageClassification.updateStrategy }}
+  updateStrategy: {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    {{- include "helper.component.podTemplate" (dict "root" . "name" "imageClassification" "component" .Values.imageClassification) | nindent 4 }}
+{{- end }}
+{{- end }}

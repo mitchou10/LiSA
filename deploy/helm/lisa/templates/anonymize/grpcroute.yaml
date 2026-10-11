@@ -1,0 +1,109 @@
+{{- if .Values.enabled }}
+{{- if .Values.anonymize.grpcRoute.enabled -}}
+{{- $fullNameApp := include "helper.componentFullname" (dict "root" . "componentName" "anonymize") -}}
+{{- $svcPortApp := .Values.anonymize.service.port -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "anonymize") }}
+  labels: {{- (include "helper.labels" (dict "root" . "componentName" "anonymize")) | nindent 4 }}
+  {{- if .Values.anonymize.grpcRoute.labels }}
+    {{- toYaml .Values.anonymize.grpcRoute.labels | nindent 4 }}
+  {{- end }}
+  {{- if .Values.anonymize.grpcRoute.annotations }}
+  annotations:
+    {{- tpl (toYaml .Values.anonymize.grpcRoute.annotations) . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.anonymize.grpcRoute.parentRefs }}
+  parentRefs:
+  {{- range .Values.anonymize.grpcRoute.parentRefs }}
+  - name: {{ .name }}
+    {{- if .namespace }}
+    namespace: {{ .namespace }}
+    {{- end }}
+    {{- if .sectionName }}
+    sectionName: {{ .sectionName }}
+    {{- end }}
+    {{- if .port }}
+    port: {{ .port }}
+    {{- end }}
+    {{- if .group }}
+    group: {{ .group }}
+    {{- end }}
+    {{- if .kind }}
+    kind: {{ .kind }}
+    {{- end }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.anonymize.grpcRoute.hostnames }}
+  hostnames:
+  {{- range .Values.anonymize.grpcRoute.hostnames }}
+  - {{ . | quote }}
+  {{- end }}
+  {{- end }}
+  {{- if .Values.anonymize.grpcRoute.rules }}
+  rules:
+  {{- range .Values.anonymize.grpcRoute.rules }}
+  {{- if .matches }}
+  - matches:
+    {{- range .matches }}
+    {{- if .method }}
+    - method:
+        {{- if .method.type }}
+        type: {{ .method.type }}
+        {{- end }}
+        {{- if .method.service }}
+        service: {{ .method.service }}
+        {{- end }}
+        {{- if .method.method }}
+        method: {{ .method.method }}
+        {{- end }}
+    {{- end }}
+      {{- if .headers }}
+      headers:
+      {{- range .headers }}
+      - type: {{ .type | default "Exact" }}
+        name: {{ .name }}
+        value: {{ .value }}
+      {{- end }}
+      {{- end }}
+    {{- end }}
+    {{- end }}
+    {{- if .filters }}
+    filters:
+    {{- toYaml .filters | nindent 4 }}
+    {{- end }}
+    {{- if .anonymizeRefs }}
+    anonymizeRefs:
+    {{- range .anonymizeRefs }}
+    - name: {{ .name | default $fullNameApp }}
+      port: {{ .port | default $svcPortApp }}
+      {{- if .weight }}
+      weight: {{ .weight }}
+      {{- end }}
+      {{- if .group }}
+      group: {{ .group }}
+      {{- end }}
+      {{- if .kind }}
+      kind: {{ .kind }}
+      {{- end }}
+      {{- if .namespace }}
+      namespace: {{ .namespace }}
+      {{- end }}
+    {{- end }}
+    {{- else }}
+    anonymizeRefs:
+    - name: {{ $fullNameApp }}
+      port: {{ $svcPortApp }}
+    {{- end }}
+  {{- end }}
+  {{- else }}
+  {{/* Default rule when no rules specified - routes all gRPC traffic */}}
+  rules:
+  - anonymizeRefs:
+    - name: {{ $fullNameApp }}
+      port: {{ $svcPortApp }}
+  {{- end }}
+{{- end }}
+{{- end }}

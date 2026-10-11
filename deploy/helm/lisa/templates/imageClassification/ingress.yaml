@@ -1,0 +1,53 @@
+{{- if .Values.enabled }}
+{{- if .Values.imageClassification.ingress.enabled -}}
+{{- $fullNameApp := include "helper.componentFullname" (dict "root" . "componentName" "imageClassification") -}}
+{{- $svcPortApp := .Values.imageClassification.service.port -}}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "imageClassification") }}
+  labels: {{- (include "helper.labels" (dict "root" . "componentName" "imageClassification")) | nindent 4 }}
+  {{- if .Values.imageClassification.ingress.labels }}
+    {{- toYaml .Values.imageClassification.ingress.labels | nindent 4 }}
+  {{- end }}
+  {{- if .Values.imageClassification.ingress.annotations }}
+  annotations:
+    {{- tpl (toYaml .Values.imageClassification.ingress.annotations) . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.imageClassification.ingress.className }}
+  ingressClassName: {{ .Values.imageClassification.ingress.className }}
+  {{- end }}
+  {{- if gt (len .Values.imageClassification.ingress.tls) 0 }}
+  tls:
+  {{- range .Values.imageClassification.ingress.tls }}
+  - hosts:
+    {{- range .hosts }}
+    - {{ . | quote }}
+    {{- end }}
+    secretName: {{ .secretName | default (printf "%s-%s" $fullNameApp "tls") | quote }}
+  {{- end }}
+  {{- end }}
+  rules:
+  {{- range .Values.imageClassification.ingress.hosts }}
+  - host: {{ .name | quote }}
+    http:
+      paths:
+      {{- range .paths }}
+      - path: {{ .path | default "/" }}
+        pathType: {{ .pathType | default "Prefix" }}
+        imageClassification:
+          service:
+          {{- if .imageClassification }}
+            name: {{ .imageClassification.serviceName | default $fullNameApp }}
+            port:
+              number: {{ .imageClassification.portNumber | default $svcPortApp }}
+          {{- else }}
+            name: {{ $fullNameApp }}
+            port:
+              number: 80
+          {{- end }}
+      {{- end }}
+  {{- end }}
+{{- end }}
+{{- end }}
