@@ -37,6 +37,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       backend: ${{ steps.filter.outputs.backend }}
       worker: ${{ steps.filter.outputs.worker }}
+      anonymize: ${{ steps.filter.outputs.anonymize }}
       services: ${{ steps.filter.outputs.services }}
       helm: ${{ steps.filter.outputs.helm }}
       ci: ${{ steps.filter.outputs.ci }}
@@ -60,6 +61,7 @@ jobs:
               - 'services/**'
             anonymize:
               - 'services/anonymize/**'
+              - 'worker/**'
             safety:
               - 'services/safety/**'
             gliner:
@@ -172,7 +174,7 @@ jobs:
     needs:
       - path-filter
       - expose-vars
-    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.ci == 'true' }}
+    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.anonymize == 'true' || needs.path-filter.outputs.ci == 'true' }}
     permissions:
       contents: read
     with:
