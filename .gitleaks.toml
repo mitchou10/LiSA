@@ -1,0 +1,16 @@
+title = "LiSA gitleaks config"
+
+[extend]
+useDefault = true
+
+# Dummy values only: test fixtures and local-dev compose defaults.
+[allowlist]
+description = "Known false positives"
+paths = [
+  '''(^|/)tests?/''',
+  '''^docker-compose\.yml$''',
+]
+regexes = [
+  '''dev-only-secret-not-for-prod''',
+  '''api_key_1234''',
+]
