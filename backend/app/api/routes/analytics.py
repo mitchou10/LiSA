@@ -1,7 +1,7 @@
+from fastapi import APIRouter, Query
+
 from app.api.deps import AnalyticsServiceDep, CurrentUserDep
 from app.schemas.analytics import DashboardStats
-
-from fastapi import APIRouter, Query
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 

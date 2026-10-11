@@ -1,3 +1,4 @@
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
@@ -22,10 +23,12 @@ async def create_service(
 async def list_services(
     service: ServiceServiceDep,
     _user: CurrentUserDep,
-    q: str | None = Query(default=None, description="Search by name or description."),
-    type: ServiceType | None = Query(default=None, description="Filter by type."),
-    limit: int = Query(20, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    q: Annotated[
+        str | None, Query(description="Search by name or description.")
+    ] = None,
+    type: Annotated[ServiceType | None, Query(description="Filter by type.")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Page[ServiceRead]:
     items, total = await service.list_page(q=q, type_=type, limit=limit, offset=offset)
     return Page(

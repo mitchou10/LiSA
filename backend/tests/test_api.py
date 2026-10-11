@@ -8,8 +8,8 @@ from httpx import ASGITransport, AsyncClient
 # Use a shared in-memory SQLite database across the async connections.
 os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
 
-from app.database import Base, engine  # noqa: E402
-from app.main import app  # noqa: E402
+from app.database import Base, engine
+from app.main import app
 
 
 @pytest.fixture(scope="module", autouse=True)

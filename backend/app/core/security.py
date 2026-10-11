@@ -6,7 +6,7 @@ covers the local provider (passwords stored in our database, tokens we issue).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import bcrypt
@@ -32,7 +32,7 @@ def verify_password(password: str, hashed: str) -> bool:
 
 def create_access_token(*, subject: str | UUID, username: str, role: str) -> str:
     """Create a signed JWT for a locally authenticated user."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + timedelta(minutes=settings.access_token_expire_minutes)
     payload = {
         "sub": str(subject),

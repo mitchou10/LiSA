@@ -1,7 +1,7 @@
 import uuid
 
-from sqlalchemy import Boolean, Enum as SAEnum
-from sqlalchemy import String, Uuid
+from sqlalchemy import Boolean, String, Uuid
+from sqlalchemy import Enum as SAEnum
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
