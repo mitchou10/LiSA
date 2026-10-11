@@ -2,22 +2,50 @@
 
 from __future__ import annotations
 
+import io
+
 import pytest
-from app import config
-from app.service import (
-    ParserError,
-    ParserService,
-    _decode,
-    _suffix,
-    blur_png,
-    build_page,
-)
-from conftest import b64
+from app.config import settings
+from app.errors import ParserError
+from app.imaging import blur_png
+from app.layout import _unit, build_page
+from app.service import ParserService, _suffix
+from app.storage import Storage
+from botocore.exceptions import ClientError
+
+
+class FakeS3:
+    """In-memory stand-in for the boto3 client (sources and screenshots)."""
+
+    def __init__(self):
+        self.objects: dict[str, bytes] = {}
+        self.puts: list[dict] = []
+
+    def get_object(self, Bucket, Key):
+        if Key not in self.objects:
+            raise ClientError({"Error": {"Code": "NoSuchKey"}}, "GetObject")
+        return {"Body": io.BytesIO(self.objects[Key])}
+
+    def put_object(self, Bucket, Key, Body, ContentType):
+        self.puts.append(
+            {"Bucket": Bucket, "Key": Key, "Body": Body, "ContentType": ContentType}
+        )
+        self.objects[Key] = Body
+
+    def delete_object(self, Bucket, Key):
+        self.objects.pop(Key, None)
 
 
 @pytest.fixture
-def service():
-    return ParserService()
+def service(monkeypatch):
+    monkeypatch.setattr(settings, "S3_BUCKET", "lisa-files")
+    return ParserService(storage=Storage(client=FakeS3()))
+
+
+@pytest.fixture
+def quiet(service, mocker):
+    """No backend: task updates are swallowed."""
+    return mocker.patch.object(service, "update_task")
 
 
 def _assert_offsets_match(page):
@@ -30,14 +58,6 @@ def _assert_offsets_match(page):
 
 
 class TestHelpers:
-    def test_decode_plain_and_data_url(self):
-        assert _decode("aGk=") == b"hi"
-        assert _decode("data:text/plain;base64,aGk=") == b"hi"
-
-    def test_decode_rejects_garbage(self):
-        with pytest.raises(ParserError):
-            _decode("not base64!!")
-
     def test_suffix_from_name_then_mime(self):
         assert _suffix("Scan.PNG", None) == ".png"
         assert _suffix("noext", "application/pdf") == ".pdf"
@@ -46,20 +66,29 @@ class TestHelpers:
 
 class TestPdf:
     def test_native_text_and_word_boxes(self, service, pdf_bytes):
-        pages = service.parse_file("doc.pdf", "application/pdf", pdf_bytes)
+        pages = service.parse_file(
+            "doc.pdf", "application/pdf", pdf_bytes, key_prefix="p"
+        )
         assert len(pages) == 2
         first = pages[0]
         assert "john@example.com" in first["content"]
         assert first["width"] > 0 and first["height"] > 0
-        assert first["image"].startswith("data:image/png;base64,")
+        assert first["s3_key"] == "p/1.png"
+        # Native PDF text: every box says which engine produced it.
+        assert {b["model"] for b in (*first["words"], *first["lines"])} == {"liteparse"}
+        assert "image_bytes" not in first and "image" not in first
         _assert_offsets_match(first)
         email = next(w for w in first["words"] if w["text"] == "john@example.com")
-        assert 0 <= email["x"] < first["width"]
-        assert 0 <= email["y"] < first["height"]
+        # Relative boxes: fractions of the page, always within 0-1.
+        for box in (email, *first["words"], *first["lines"]):
+            for k in ("x", "y", "width", "height"):
+                assert 0 <= box[k] <= 1
+            assert box["x"] + box["width"] <= 1 + 1e-9
+            assert box["y"] + box["height"] <= 1 + 1e-9
 
     def test_entity_offsets_map_to_boxes(self, service, pdf_bytes):
         """An analyser's start_char/end_char selects the matching word boxes."""
-        page = service.parse_file("doc.pdf", None, pdf_bytes)[0]
+        page = service.parse_file("doc.pdf", None, pdf_bytes, key_prefix="p")[0]
         start = page["content"].index("john@example.com")
         end = start + len("john@example.com")
         hit = [w for w in page["words"] if w["start"] < end and w["end"] > start]
@@ -69,11 +98,16 @@ class TestPdf:
 class TestImageOcr:
     def test_ocr_text_and_proportional_words(self, service, png_bytes):
         try:
-            pages = service.parse_file("scan.png", "image/png", png_bytes)
+            pages = service.parse_file(
+                "scan.png", "image/png", png_bytes, key_prefix="p"
+            )
         except ParserError as exc:  # tessdata download unavailable (offline CI)
             pytest.skip(str(exc))
         page = pages[0]
         assert "Marie Curie" in page["content"]
+        # OCR text: the boxes come from Tesseract, with a confidence.
+        assert {b["model"] for b in (*page["words"], *page["lines"])} == {"tesseract"}
+        assert page["lines"][0]["confidence"] is not None
         _assert_offsets_match(page)
         words = page["words"]
         # Proportional split keeps words ordered left to right inside the line.
@@ -83,158 +117,242 @@ class TestImageOcr:
 
 
 class TestProcess:
-    def test_process_numbers_pages_across_files(self, service, pdf_bytes):
+    def _files(self, service, *entries):
+        """Put sources in the fake bucket and return the matching input."""
+        files = []
+        for key, name, data in entries:
+            service.storage.client.objects[key] = data
+            files.append({"s3_key": key, "filename": name})
+        return {"files": files}
+
+    def test_numbers_pages_across_files(self, service, pdf_bytes, quiet):
         result = service.process(
-            {
-                "files": [
-                    {"filename": "a.pdf", "data_base64": b64(pdf_bytes)},
-                    {"filename": "b.pdf", "data_base64": b64(pdf_bytes)},
-                ]
-            }
+            self._files(
+                service,
+                ("uploads/a", "a.pdf", pdf_bytes),
+                ("uploads/b", "b.pdf", pdf_bytes),
+            )
         )
         assert [p["page_number"] for p in result["pages"]] == [1, 2, 3, 4]
         assert [p["filename"] for p in result["pages"]] == ["a.pdf"] * 2 + ["b.pdf"] * 2
         assert result["error"] is None
 
-    def test_process_reports_progress_and_scrubs_input(
-        self, service, pdf_bytes, mocker
-    ):
+    def test_reports_progress_and_success(self, service, pdf_bytes, mocker):
         update = mocker.patch.object(service, "update_task")
-        scrub = mocker.patch.object(service._tasks, "update")
         service.process(
-            {"files": [{"filename": "a.pdf", "data_base64": b64(pdf_bytes)}]},
-            task_id="t1",
+            self._files(service, ("uploads/a", "a.pdf", pdf_bytes)), task_id="t1"
         )
         statuses = [c.kwargs.get("status") for c in update.call_args_list]
         assert statuses[0] == "running" and statuses[-1] == "success"
-        # The uploaded bytes are removed from the stored task.
-        scrub.assert_called_once_with(
-            "t1",
-            {
-                "input_data": {
-                    "files": [{"file_id": None, "filename": "a.pdf", "mime": None}]
-                }
-            },
-        )
 
-    def test_process_reads_from_storage_and_deletes_source(
-        self, service, pdf_bytes, mocker
-    ):
-        download = mocker.patch.object(
-            service._files, "download", return_value=pdf_bytes
-        )
-        delete = mocker.patch.object(service._files, "delete")
-        mocker.patch.object(service, "update_task")
-        mocker.patch.object(service._tasks, "update")
+    def test_source_deleted_and_screenshots_stored(self, service, pdf_bytes, quiet):
+        s3 = service.storage.client
         result = service.process(
-            {"files": [{"file_id": "f1", "filename": "a.pdf"}]}, task_id="t3"
+            self._files(service, ("uploads/a", "a.pdf", pdf_bytes)), task_id="t3"
         )
-        download.assert_called_once_with("f1")
-        delete.assert_called_once_with("f1")
-        assert len(result["pages"]) == 2
+        assert "uploads/a" not in s3.objects
+        assert [p["s3_key"] for p in result["pages"]] == [
+            "pages/t3/1/1.png",
+            "pages/t3/1/2.png",
+        ]
+        assert set(s3.objects) == {"pages/t3/1/1.png", "pages/t3/1/2.png"}
 
     def test_source_kept_when_deletion_disabled(
-        self, service, pdf_bytes, mocker, monkeypatch
+        self, service, pdf_bytes, quiet, monkeypatch
     ):
-        monkeypatch.setattr(config, "DELETE_SOURCE_AFTER_PARSE", False)
-        mocker.patch.object(service._files, "download", return_value=pdf_bytes)
-        delete = mocker.patch.object(service._files, "delete")
-        mocker.patch.object(service, "update_task")
-        mocker.patch.object(service._tasks, "update")
-        service.process({"files": [{"file_id": "f1", "filename": "a.pdf"}]})
-        delete.assert_not_called()
+        monkeypatch.setattr(settings, "DELETE_SOURCE_AFTER_PARSE", False)
+        service.process(self._files(service, ("uploads/a", "a.pdf", pdf_bytes)))
+        assert "uploads/a" in service.storage.client.objects
 
-    def test_missing_stored_file_fails_the_task(self, service, mocker):
-        from worker.core.client import ClientError
+    def test_filename_defaults_to_key_name(self, service, pdf_bytes, quiet):
+        service.storage.client.objects["docs/report.pdf"] = pdf_bytes
+        result = service.process({"files": [{"s3_key": "docs/report.pdf"}]})
+        assert result["pages"][0]["filename"] == "report.pdf"
 
-        mocker.patch.object(
-            service._files, "download", side_effect=ClientError(404, "not found")
-        )
+    def test_missing_source_fails_the_task(self, service, mocker):
         update = mocker.patch.object(service, "update_task")
-        mocker.patch.object(service._tasks, "update")
         with pytest.raises(ParserError, match="Cannot fetch"):
-            service.process(
-                {"files": [{"file_id": "nope", "filename": "a.pdf"}]}, task_id="t4"
-            )
+            service.process({"files": [{"s3_key": "nope", "filename": "a.pdf"}]})
         assert update.call_args.kwargs["status"] == "error"
 
+    def test_file_without_key_is_rejected(self, service, quiet):
+        with pytest.raises(ParserError, match="s3_key"):
+            service.process({"files": [{"filename": "a.pdf"}]})
+
     @pytest.mark.parametrize("payload", [None, {}, {"files": []}])
-    def test_process_requires_files(self, service, payload):
+    def test_requires_files(self, service, quiet, payload):
         with pytest.raises(ParserError, match="No file"):
             service.process(payload)
 
-    def test_process_marks_task_failed_on_bad_file(self, service, mocker):
+    def test_marks_task_failed_on_bad_file(self, service, mocker):
         update = mocker.patch.object(service, "update_task")
-        mocker.patch.object(service._tasks, "update")
+        service.storage.client.objects["uploads/x"] = b"plain text"
         with pytest.raises(ParserError):
             service.process(
-                {"files": [{"filename": "x.txt", "data_base64": b64(b"plain text")}]},
-                task_id="t2",
+                {"files": [{"s3_key": "uploads/x", "filename": "x.txt"}]}, task_id="t2"
             )
         assert update.call_args.kwargs["status"] == "error"
 
     def test_file_size_limit(self, service, monkeypatch):
-        monkeypatch.setattr(config, "MAX_FILE_MB", 0.0001)
+        monkeypatch.setattr(settings, "MAX_FILE_MB", 0.0001)
         with pytest.raises(ParserError, match="limit"):
-            service.parse_file("big.pdf", None, b"x" * 1000)
+            service.parse_file("big.pdf", None, b"x" * 1000, key_prefix="p")
+
+
+class _Item:
+    def __init__(self, text, x=0, y=0, width=10, height=5, confidence=None):
+        self.text, self.x, self.y, self.width, self.height = text, x, y, width, height
+        self.confidence, self.words = confidence, []
+
+
+class _Parsed:
+    def __init__(self, items, width=100, height=100):
+        self.text_items, self.width, self.height = items, width, height
+
+
+def test_build_page_normalizes_boxes_to_the_page():
+    page = build_page(
+        _Parsed([_Item("hello", 50, 100, 100, 20)], width=200, height=400)
+    ).model_dump()
+    assert (page["width"], page["height"]) == (200, 400)  # page units kept
+    line = page["lines"][0]
+    assert (line["x"], line["y"], line["width"], line["height"]) == (
+        0.25,
+        0.25,
+        0.5,
+        0.05,
+    )
+    word = page["words"][0]
+    assert (word["x"], word["width"]) == (0.25, 0.5)
+
+
+def test_unit_clamps_and_handles_empty_page():
+    assert _unit(50, 200) == 0.25
+    assert _unit(-5, 200) == 0.0
+    assert _unit(300, 200) == 1.0
+    assert _unit(10, 0) == 0.0
 
 
 def test_build_page_skips_blank_lines():
-    class Item:
-        def __init__(self, text):
-            self.text, self.x, self.y, self.width, self.height = text, 0, 0, 10, 5
-            self.confidence, self.words = None, []
-
-    class Parsed:
-        width, height = 100, 100
-        text_items = [Item("hello world"), Item("   "), Item("bye")]
-
-    page = build_page(Parsed())
+    page = build_page(
+        _Parsed([_Item("hello world"), _Item("   "), _Item("bye")])
+    ).model_dump()
     assert page["content"] == "hello world\nbye"
     assert [w["text"] for w in page["words"]] == ["hello", "world", "bye"]
     _assert_offsets_match(page)
 
 
+def test_boxes_carry_the_model_that_produced_them():
+    page = build_page(
+        _Parsed([_Item("native text"), _Item("scanned text", confidence=0.93)])
+    )
+    native, ocr = page.lines
+    assert native.model == "liteparse" and ocr.model == "tesseract"
+    assert [w.model for w in page.words] == ["liteparse"] * 2 + ["tesseract"] * 2
+    assert ocr.confidence == 0.93
+
+
+class TestPageImageStorage:
+    def test_fails_before_reading_without_bucket(self, service, quiet, monkeypatch):
+        monkeypatch.setattr(settings, "S3_BUCKET", "")
+        service.storage.client.objects["uploads/a"] = b"x"
+        with pytest.raises(ParserError, match="S3_BUCKET"):
+            service.process({"files": [{"s3_key": "uploads/a", "filename": "a.pdf"}]})
+        assert (
+            "uploads/a" in service.storage.client.objects
+        )  # the source is not consumed
+
+    def test_screenshots_uploaded_as_png_and_bytes_not_returned(
+        self, service, pdf_bytes
+    ):
+        pages = service.parse_file(
+            "a.pdf", "application/pdf", pdf_bytes, key_prefix="pages/t1/1"
+        )
+        puts = service.storage.client.puts
+        assert len(puts) == len(pages) == 2
+        assert puts[0]["Key"] == "pages/t1/1/1.png"
+        assert puts[0]["Bucket"] == "lisa-files"
+        assert puts[0]["ContentType"] == "image/png"
+        assert puts[0]["Body"].startswith(b"\x89PNG")
+        assert pages[0]["s3_key"] == "pages/t1/1/1.png"
+        # Bytes go to S3 only: nothing image-like in the pages.
+        assert all("image_bytes" not in p and "image" not in p for p in pages)
+
+
 class TestBlur:
-    @staticmethod
-    def _decode_image(page):
-        import base64
-
-        return base64.b64decode(page["image"].split(",", 1)[1])
-
-    def test_blurred_image_is_unreadable_but_boxes_remain(self, service, png_bytes):
-        from liteparse import LiteParse
-
+    def test_blurred_by_default_boxes_and_text_stay_clear(self, service, png_bytes):
         try:
-            clear = service.parse_file("scan.png", "image/png", png_bytes)[0]
-        except ParserError as exc:
+            blurred = service.parse_file(
+                "scan.png", "image/png", png_bytes, key_prefix="b"
+            )[0]
+        except ParserError as exc:  # tessdata download unavailable (offline CI)
             pytest.skip(str(exc))
-        blurred = service.parse_file("scan.png", "image/png", png_bytes, blur=True)[0]
-
-        assert clear["blurred"] is False and blurred["blurred"] is True
-        assert self._decode_image(clear) != self._decode_image(blurred)
-        # Text and boxes (used by the overlay) are unchanged...
+        clear = service.parse_file(
+            "scan.png", "image/png", png_bytes, key_prefix="c", blur=False
+        )[0]
+        assert blurred["blurred"] is True and clear["blurred"] is False
+        objects = service.storage.client.objects
+        assert objects["b/1.png"] != objects["c/1.png"]
+        # Text and boxes are untouched by the blur.
         assert blurred["content"] == clear["content"]
         assert blurred["words"] == clear["words"]
-        # ...but OCR can no longer read the blurred pixels.
-        reread = LiteParse(quiet=True, ocr_language=config.OCR_LANGUAGE).parse(
-            self._decode_image(blurred)
-        )
-        assert "Curie" not in reread.text and "Marie" not in reread.text
+        _assert_offsets_match(blurred)
 
     def test_blur_keeps_dimensions(self, png_bytes):
-        import io
-
         from PIL import Image
 
-        out = Image.open(io.BytesIO(blur_png(png_bytes)))
-        assert out.size == Image.open(io.BytesIO(png_bytes)).size
+        before = Image.open(io.BytesIO(png_bytes)).size
+        after = Image.open(io.BytesIO(blur_png(png_bytes))).size
+        assert before == after
 
-    def test_process_forwards_blur_flag(self, service, pdf_bytes):
-        files = [{"filename": "a.pdf", "data_base64": b64(pdf_bytes)}]
-        clear = service.process({"files": files})["pages"][0]
-        blurred = service.process({"files": files, "blur_screenshots": True})["pages"][
-            0
-        ]
-        assert (clear["blurred"], blurred["blurred"]) == (False, True)
-        assert clear["image"] != blurred["image"]
+    def _blur_used(self, service, pdf_bytes, mocker, extra=None):
+        service.storage.client.objects["uploads/a"] = pdf_bytes
+        mocker.patch.object(service, "update_task")
+        spy = mocker.spy(service, "parse_file")
+        service.process(
+            {"files": [{"s3_key": "uploads/a", "filename": "a.pdf"}], **(extra or {})}
+        )
+        return spy.call_args.kwargs["blur"]
+
+    def test_process_blurs_by_default(self, service, pdf_bytes, mocker):
+        assert self._blur_used(service, pdf_bytes, mocker) is True
+
+    def test_process_can_disable_blur(self, service, pdf_bytes, mocker):
+        extra = {"blur_screenshots": False}
+        assert self._blur_used(service, pdf_bytes, mocker, extra) is False
+
+    def test_config_default_can_disable_blur(
+        self, service, pdf_bytes, mocker, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "BLUR_SCREENSHOTS", False)
+        assert self._blur_used(service, pdf_bytes, mocker) is False
+
+    def test_source_deleted_even_if_parsing_fails(self, service, mocker):
+        service.storage.client.objects["uploads/x"] = b"not a pdf"
+        mocker.patch.object(service, "update_task")
+        mocker.patch.object(
+            service, "parse_file", side_effect=ParserError("cannot parse")
+        )
+        with pytest.raises(ParserError):
+            service.process({"files": [{"s3_key": "uploads/x", "filename": "x.pdf"}]})
+        assert "uploads/x" not in service.storage.client.objects
+
+
+def test_settings_celery_urls_default_to_redis(monkeypatch):
+    from app.config import Settings
+
+    monkeypatch.delenv("CELERY_BROKER_URL", raising=False)
+    monkeypatch.delenv("CELERY_RESULT_BACKEND", raising=False)
+    cfg = Settings(REDIS_URL="redis://r:6379/1")
+    assert cfg.CELERY_BROKER_URL == cfg.CELERY_RESULT_BACKEND == "redis://r:6379/1"
+    cfg = Settings(REDIS_URL="redis://r", CELERY_BROKER_URL="amqp://b")
+    assert cfg.CELERY_BROKER_URL == "amqp://b"
+
+
+def test_settings_read_the_environment(monkeypatch):
+    from app.config import Settings
+
+    monkeypatch.setenv("BLUR_SCREENSHOTS", "false")
+    monkeypatch.setenv("MAX_FILE_MB", "2.5")
+    cfg = Settings()
+    assert cfg.BLUR_SCREENSHOTS is False and cfg.MAX_FILE_MB == 2.5

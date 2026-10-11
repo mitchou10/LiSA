@@ -148,7 +148,14 @@ export default function FileAnalysisTab() {
         width: p.width,
         height: p.height,
         image: p.image,
-        words: p.words || [],
+        // The parser returns boxes as 0-1 fractions; the viewer works in page units.
+        words: (p.words || []).map((w) => ({
+          ...w,
+          x: w.x * p.width,
+          y: w.y * p.height,
+          width: w.width * p.width,
+          height: w.height * p.height,
+        })),
         parsed: true,
       });
     }
