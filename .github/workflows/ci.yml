@@ -38,6 +38,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       worker: ${{ steps.filter.outputs.worker }}
       anonymize: ${{ steps.filter.outputs.anonymize }}
+      classification: ${{ steps.filter.outputs.classification }}
       services: ${{ steps.filter.outputs.services }}
       helm: ${{ steps.filter.outputs.helm }}
       ci: ${{ steps.filter.outputs.ci }}
@@ -68,6 +69,9 @@ jobs:
               - 'services/gliner/**'
             parser:
               - 'services/parser/**'
+            classification:
+              - 'services/classification/**'
+              - 'worker/**'
             helm:
               - 'deploy/helm/**'
               - 'ci/configs/ct.yaml'
@@ -86,6 +90,7 @@ jobs:
           SAFETY: ${{ steps.filter.outputs.safety }}
           GLINER: ${{ steps.filter.outputs.gliner }}
           PARSER: ${{ steps.filter.outputs.parser }}
+          CLASSIFICATION: ${{ steps.filter.outputs.classification }}
           CI: ${{ steps.filter.outputs.ci }}
         run: |
           set -euo pipefail
@@ -110,6 +115,10 @@ jobs:
           fi
           if [ "$PARSER" = "true" ] || [ "$WORKER" = "true" ] || [ "$CI" = "true" ]; then
             add '{"name":"parser","context":".","dockerfile":"services/parser/Dockerfile"}'
+          fi
+
+          if [ "$CLASSIFICATION" = "true" ] || [ "$WORKER" = "true" ] || [ "$CI" = "true" ]; then
+            add '{"name":"classification","context":".","dockerfile":"services/classification/Dockerfile"}'
           fi
 
           echo "Images to build: $IMAGES"
@@ -174,7 +183,7 @@ jobs:
     needs:
       - path-filter
       - expose-vars
-    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.anonymize == 'true' || needs.path-filter.outputs.ci == 'true' }}
+    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.anonymize == 'true' || needs.path-filter.outputs.classification == 'true' || needs.path-filter.outputs.ci == 'true' }}
     permissions:
       contents: read
     with:
