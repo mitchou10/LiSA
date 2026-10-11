@@ -199,3 +199,58 @@ export async function restoreProfileVersion(serviceKey, version) {
 }
 
 export { BASE_URL };
+
+// Projects and what they look for ----------------------------------------
+// kind: "entities" | "relations" | "classifications" | "safety"
+export const DEFINITION_KINDS = ["entities", "relations", "classifications", "safety"];
+
+const json = (method, body) => ({ method, body: JSON.stringify(body) });
+
+export async function getProjects() {
+  const data = await request("/projects?limit=500");
+  return data?.items ?? [];
+}
+
+export const getProject = (id) => request(`/projects/${id}`);
+export const createProject = (data) => request("/projects", json("POST", data));
+export const updateProject = (id, data) =>
+  request(`/projects/${id}`, json("PATCH", data));
+export const deleteProject = (id) => request(`/projects/${id}`, { method: "DELETE" });
+
+export const getDefinitions = (projectId, kind) =>
+  request(`/projects/${projectId}/${kind}`);
+export const createDefinition = (projectId, kind, data) =>
+  request(`/projects/${projectId}/${kind}`, json("POST", data));
+export const updateDefinition = (projectId, kind, id, data) =>
+  request(`/projects/${projectId}/${kind}/${id}`, json("PATCH", data));
+export const deleteDefinition = (projectId, kind, id) =>
+  request(`/projects/${projectId}/${kind}/${id}`, { method: "DELETE" });
+
+// Upload a file to object storage; returns its metadata (id, s3_key, ...).
+export async function uploadFile(file) {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${API_V1}/files`, {
+    method: "POST",
+    credentials: "include",
+    body, // the browser sets the multipart Content-Type itself
+  });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      detail = (await res.json())?.detail || detail;
+    } catch {
+      /* ignore non-JSON error bodies */
+    }
+    const error = new Error(detail);
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+// Start a run: analyse a text or files with what the project looks for.
+// body: { text | file_ids, blur_screenshots?, entity_ids?, relation_ids?,
+//         classification_ids?, safety_ids? }
+export const startRun = (projectId, body) =>
+  request(`/projects/${projectId}/runs`, json("POST", body));

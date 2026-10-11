@@ -24,3 +24,19 @@ class UserRole(str, enum.Enum):
 
     ADMIN = "admin"
     USER = "user"
+
+
+class Severity(str, enum.Enum):
+    """How serious a finding is."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class Action(str, enum.Enum):
+    """What to do with a finding."""
+
+    ALLOW = "allow"
+    REDACT = "redact"
+    BLOCK = "block"

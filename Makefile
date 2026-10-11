@@ -1,7 +1,7 @@
 
 BACKEND_DIR := backend
 
-.PHONY: help install lint format run-test test build clean
+.PHONY: help install lint format run-test test build clean erd
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -28,3 +28,6 @@ test: ## Run unit tests (assumes dependencies are installed)
 clean: ## Remove caches and build artifacts
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 	rm -rf $(BACKEND_DIR)/.pytest_cache $(BACKEND_DIR)/.ruff_cache $(BACKEND_DIR)/test.db
+
+erd: ## Regenerate the data model diagram (docs/data-model.png) from the models
+	cd $(BACKEND_DIR) && uv run --with-editable . --with eralchemy2 python scripts/generate_erd.py ../docs/data-model.png

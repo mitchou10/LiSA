@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import BigInteger, String, Uuid
+from sqlalchemy import BigInteger, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -14,6 +14,12 @@ class StoredFile(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     owner_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     filename: Mapped[str] = mapped_column(String(512), nullable=False)

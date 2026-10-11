@@ -27,6 +27,7 @@ async def list_tasks(
     user_id: Annotated[str | None, Query()] = None,
     status: Annotated[TaskStatus | None, Query(description="Filter by status.")] = None,
     service_id: Annotated[UUID | None, Query(description="Filter by service.")] = None,
+    project_id: Annotated[UUID | None, Query(description="Filter by project.")] = None,
     roots_only: Annotated[
         bool, Query(description="Only return root tasks (no parent).")
     ] = False,
@@ -37,6 +38,7 @@ async def list_tasks(
         user_id=user_id,
         status=status,
         service_id=service_id,
+        project_id=project_id,
         roots_only=roots_only,
         limit=limit,
         offset=offset,

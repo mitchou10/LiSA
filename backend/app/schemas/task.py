@@ -33,6 +33,7 @@ class TaskRead(BaseModel):
     id: UUID
     parent_task_id: UUID | None
     service_id: UUID | None
+    project_id: UUID | None = None
     user_id: str
     status: TaskStatus
     progress: int

@@ -18,6 +18,8 @@ def fake_storage(monkeypatch):
         store[key] = data
 
     async def get(key):
+        if key not in store:
+            raise storage.ObjectNotFoundError(key)
         return store[key]
 
     async def delete(key):
@@ -58,6 +60,21 @@ async def test_upload_read_delete(client: AsyncClient, fake_storage):
     assert fake_storage == {}
     resp = await client.get(f"/api/v1/files/{meta['id']}", headers=headers)
     assert resp.status_code == 404
+
+
+async def test_a_deleted_source_keeps_its_metadata_and_is_gone(
+    client: AsyncClient, fake_storage
+):
+    headers = await _admin_headers(client)
+    meta = (await _upload(client, headers)).json()
+    fake_storage.clear()  # the parser read the file, then deleted it from storage
+
+    assert (await client.get(f"/api/v1/files/{meta['id']}", headers=headers)).json()[
+        "sha256"
+    ] == meta["sha256"]
+    resp = await client.get(f"/api/v1/files/{meta['id']}/content", headers=headers)
+    assert resp.status_code == 410
+    assert "deleted" in resp.json()["detail"]
 
 
 async def test_upload_requires_auth(client: AsyncClient):

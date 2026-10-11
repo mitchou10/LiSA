@@ -17,6 +17,10 @@ settings = get_settings()
 _bucket_ready = False
 
 
+class ObjectNotFoundError(Exception):
+    """The object is not in the bucket (never stored, or deleted since)."""
+
+
 @lru_cache
 def _client() -> Any:
     return boto3.client(
@@ -50,7 +54,12 @@ def _put(key: str, data: bytes, content_type: str) -> None:
 
 
 def _get(key: str) -> bytes:
-    return _client().get_object(Bucket=settings.s3_bucket, Key=key)["Body"].read()
+    try:
+        return _client().get_object(Bucket=settings.s3_bucket, Key=key)["Body"].read()
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") in ("NoSuchKey", "404"):
+            raise ObjectNotFoundError(key) from exc
+        raise
 
 
 def _delete(key: str) -> None:

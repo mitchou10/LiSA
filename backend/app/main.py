@@ -11,6 +11,7 @@ from app.migrations import run_migrations
 from app.services.detection_profile import DetectionProfileService
 from app.services.exceptions import (
     ConflictError,
+    GoneError,
     InvalidStateError,
     NotFoundError,
 )
@@ -59,6 +60,11 @@ async def conflict_handler(_: Request, exc: ConflictError) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT, content={"detail": str(exc)}
     )
+
+
+@app.exception_handler(GoneError)
+async def gone_handler(_: Request, exc: GoneError) -> JSONResponse:
+    return JSONResponse(status_code=status.HTTP_410_GONE, content={"detail": str(exc)})
 
 
 @app.exception_handler(InvalidStateError)

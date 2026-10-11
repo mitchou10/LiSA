@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, func
+from sqlalchemy import DateTime, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -18,3 +18,9 @@ class TimestampMixin:
         onupdate=func.now(),
         nullable=False,
     )
+
+
+class CreatedByMixin:
+    """Who created the row: the id of the authenticated user (local or Keycloak)."""
+
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False, index=True)

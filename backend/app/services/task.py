@@ -24,7 +24,7 @@ class TaskService:
         self.repo = TaskRepository(session)
         self.services = ServiceRepository(session)
 
-    async def _dispatch(self, task: Task) -> None:
+    async def dispatch(self, task: Task) -> None:
         """Send the task to its service's worker via the broker (best-effort)."""
         if task.service_id is None:
             return
@@ -53,7 +53,7 @@ class TaskService:
         )
         task = await self.repo.add(task)
         await self.session.commit()
-        await self._dispatch(task)
+        await self.dispatch(task)
         return task
 
     async def get(self, task_id: UUID) -> Task:
@@ -79,6 +79,7 @@ class TaskService:
         user_id: str | None = None,
         status: TaskStatus | None = None,
         service_id: UUID | None = None,
+        project_id: UUID | None = None,
         roots_only: bool = False,
         limit: int = 100,
         offset: int = 0,
@@ -88,6 +89,7 @@ class TaskService:
             user_id=user_id,
             status=status,
             service_id=service_id,
+            project_id=project_id,
             roots_only=roots_only,
             limit=limit,
             offset=offset,
@@ -96,6 +98,7 @@ class TaskService:
             user_id=user_id,
             status=status,
             service_id=service_id,
+            project_id=project_id,
             roots_only=roots_only,
         )
         return items, total
@@ -110,9 +113,51 @@ class TaskService:
             setattr(task, field, value)
         await self.session.commit()
         await self.session.refresh(task)
+        if task.status in TERMINAL_STATUSES:
+            await self._release_waiting(task)
         if task.parent_task_id is not None:
             await self._rollup_parent(task.parent_task_id)
         return task
+
+    async def _release_waiting(self, task: Task) -> None:
+        """Feed the tasks that wait for ``task`` (a parser) once it is finished.
+
+        Sibling tasks created with ``awaiting`` in their input get the pages the
+        task produced and are dispatched; if it failed, they fail with it.
+        """
+        if task.parent_task_id is None:
+            return
+        waiting = [
+            t
+            for t in await self.repo.list_children(task.parent_task_id)
+            if t.status == TaskStatus.PENDING
+            and t.input_data.get("awaiting") == str(task.id)
+        ]
+        if not waiting:
+            return
+        pages = (task.output_data or {}).get("pages")
+        succeeded = task.status == TaskStatus.SUCCESS and bool(pages)
+        for waiter in waiting:
+            if succeeded:
+                payload = {
+                    k: v for k, v in waiter.input_data.items() if k != "awaiting"
+                }
+                payload["pages"] = pages
+                waiter.input_data = (
+                    payload  # a new dict: JSON columns are not mutation-tracked
+                )
+            else:
+                waiter.status = TaskStatus.ERROR
+                waiter.error = (
+                    "The parser found no page."
+                    if task.status == TaskStatus.SUCCESS
+                    else f"The parser did not finish ({task.status.value}): {task.error or 'no details'}"
+                )
+        await self.session.commit()
+        for waiter in waiting:
+            if succeeded:
+                await self.session.refresh(waiter)
+                await self.dispatch(waiter)
 
     async def _rollup_parent(self, parent_id: UUID) -> None:
         """Recompute a parent task's status/progress from its children.
@@ -179,7 +224,7 @@ class TaskService:
         task.output_data = None
         await self.session.commit()
         await self.session.refresh(task)
-        await self._dispatch(task)
+        await self.dispatch(task)
         return task
 
     async def delete(self, task_id: UUID) -> None:
