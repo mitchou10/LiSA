@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import pytest
-
-from app.service import CATEGORY_MAP, GlinerService, _severity_for_category
+from app.service import GlinerService, _severity_for_category
 
 
 class TestSeverityForCategory:
@@ -80,7 +77,9 @@ class TestGlinerServiceIterPages:
         assert result[1]["content"] == "Page 2: Emergency contact: jane@example.com"
         assert result[1]["page_number"] == 2
 
-    def test_iter_pages_with_dict_content(self, mock_env, sample_input_dict_with_content):
+    def test_iter_pages_with_dict_content(
+        self, mock_env, sample_input_dict_with_content
+    ):
         service = GlinerService()
         result = service._iter_pages(sample_input_dict_with_content)
         assert len(result) == 1
@@ -109,7 +108,9 @@ class TestGlinerServiceIterPages:
 class TestGlinerServiceScanPage:
     """Tests for GlinerService._scan_page()."""
 
-    def test_scan_page_with_entities(self, mock_env, mock_gliner_model, sample_gliner_entities):
+    def test_scan_page_with_entities(
+        self, mock_env, mock_gliner_model, sample_gliner_entities
+    ):
         mock_gliner_model.predict_entities.return_value = sample_gliner_entities
 
         service = GlinerService()
@@ -122,8 +123,12 @@ class TestGlinerServiceScanPage:
         assert result["pii"] is True
         assert len(result["entities"]) == 2
 
-    def test_scan_page_with_secret_entities(self, mock_env, mock_gliner_model, sample_gliner_entities_with_secrets):
-        mock_gliner_model.predict_entities.return_value = sample_gliner_entities_with_secrets
+    def test_scan_page_with_secret_entities(
+        self, mock_env, mock_gliner_model, sample_gliner_entities_with_secrets
+    ):
+        mock_gliner_model.predict_entities.return_value = (
+            sample_gliner_entities_with_secrets
+        )
 
         service = GlinerService()
         result = service._scan_page("Test content with secrets")
@@ -193,7 +198,9 @@ class TestGlinerServiceScanPage:
 class TestGlinerServiceProcess:
     """Tests for GlinerService.process()."""
 
-    def test_process_single_page(self, mock_env, mock_gliner_model, sample_gliner_entities):
+    def test_process_single_page(
+        self, mock_env, mock_gliner_model, sample_gliner_entities
+    ):
         mock_gliner_model.predict_entities.return_value = sample_gliner_entities
 
         service = GlinerService()
@@ -261,7 +268,9 @@ class TestGlinerServiceProcess:
         assert len(result["pages"]) == 1
         assert result["pages"][0]["detections"][0]["classification"] == "gliner_ner"
 
-    def test_process_includes_details(self, mock_env, mock_gliner_model, sample_gliner_entities):
+    def test_process_includes_details(
+        self, mock_env, mock_gliner_model, sample_gliner_entities
+    ):
         mock_gliner_model.predict_entities.return_value = sample_gliner_entities
 
         service = GlinerService()
@@ -279,14 +288,35 @@ class TestGlinerServiceIntegration:
     def test_full_flow_with_multiple_entity_types(self, mock_env, mock_gliner_model):
         """Test complete flow with multiple entity types across pages."""
         page1_entities = [
-            {"text": "John Doe", "label": "person", "start": 0, "end": 8, "score": 0.95},
-            {"text": "sk-123", "label": "API key", "start": 20, "end": 26, "score": 0.99},
+            {
+                "text": "John Doe",
+                "label": "person",
+                "start": 0,
+                "end": 8,
+                "score": 0.95,
+            },
+            {
+                "text": "sk-123",
+                "label": "API key",
+                "start": 20,
+                "end": 26,
+                "score": 0.99,
+            },
         ]
         page2_entities = [
-            {"text": "evidence file", "label": "evidence", "start": 0, "end": 13, "score": 0.88},
+            {
+                "text": "evidence file",
+                "label": "evidence",
+                "start": 0,
+                "end": 13,
+                "score": 0.88,
+            },
         ]
 
-        mock_gliner_model.predict_entities.side_effect = [page1_entities, page2_entities]
+        mock_gliner_model.predict_entities.side_effect = [
+            page1_entities,
+            page2_entities,
+        ]
 
         input_data = {
             "pages": [
@@ -319,7 +349,6 @@ class TestGlinerServiceIntegration:
 
         # First process call
         service.process("content 1")
-        first_call_count = mock_gliner_model.predict_entities.call_count
 
         # Second process call
         service.process("content 2")

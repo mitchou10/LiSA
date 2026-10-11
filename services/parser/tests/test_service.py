@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import pytest
-from conftest import b64
-
 from app import config
-from app.service import ParserError, ParserService, _decode, _suffix, blur_png, build_page
+from app.service import (
+    ParserError,
+    ParserService,
+    _decode,
+    _suffix,
+    blur_png,
+    build_page,
+)
+from conftest import b64
 
 
 @pytest.fixture
@@ -90,7 +96,9 @@ class TestProcess:
         assert [p["filename"] for p in result["pages"]] == ["a.pdf"] * 2 + ["b.pdf"] * 2
         assert result["error"] is None
 
-    def test_process_reports_progress_and_scrubs_input(self, service, pdf_bytes, mocker):
+    def test_process_reports_progress_and_scrubs_input(
+        self, service, pdf_bytes, mocker
+    ):
         update = mocker.patch.object(service, "update_task")
         scrub = mocker.patch.object(service._tasks, "update")
         service.process(
@@ -179,6 +187,8 @@ class TestBlur:
     def test_process_forwards_blur_flag(self, service, pdf_bytes):
         files = [{"filename": "a.pdf", "data_base64": b64(pdf_bytes)}]
         clear = service.process({"files": files})["pages"][0]
-        blurred = service.process({"files": files, "blur_screenshots": True})["pages"][0]
+        blurred = service.process({"files": files, "blur_screenshots": True})["pages"][
+            0
+        ]
         assert (clear["blurred"], blurred["blurred"]) == (False, True)
         assert clear["image"] != blurred["image"]

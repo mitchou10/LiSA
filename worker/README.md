@@ -39,17 +39,19 @@ The base URL is resolved in this order:
 from worker.core.client import LisaClient
 
 with LisaClient() as lisa:
-    print(lisa.health.check())                 # GET /health
+    print(lisa.health.check())  # GET /health
 
-    services = lisa.services.list()            # GET /api/v1/services
+    services = lisa.services.list()  # GET /api/v1/services
 
-    task = lisa.tasks.submit({                  # POST /api/v1/tasks
-        "user_id": "worker",
-        "input_data": {"pages": [{"content": "hello"}]},
-    })
-    status = lisa.tasks.status(task["id"])      # GET /tasks/{id}/status
-    lisa.tasks.retry(task["id"])                # POST /tasks/{id}/retry
-    lisa.tasks.revoke(task["id"])               # POST /tasks/{id}/revoke
+    task = lisa.tasks.submit(
+        {  # POST /api/v1/tasks
+            "user_id": "worker",
+            "input_data": {"pages": [{"content": "hello"}]},
+        }
+    )
+    status = lisa.tasks.status(task["id"])  # GET /tasks/{id}/status
+    lisa.tasks.retry(task["id"])  # POST /tasks/{id}/retry
+    lisa.tasks.revoke(task["id"])  # POST /tasks/{id}/revoke
 ```
 
 Each client can also be used on its own:

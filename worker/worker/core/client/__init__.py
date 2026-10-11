@@ -28,9 +28,9 @@ __all__ = [
     "ClientError",
     "DetectionProfileClient",
     "HealthClient",
+    "LisaClient",
     "ServiceClient",
     "TaskClient",
-    "LisaClient",
 ]
 
 
@@ -57,7 +57,7 @@ class LisaClient:
     def close(self) -> None:
         self._http.close()
 
-    def __enter__(self) -> "LisaClient":
+    def __enter__(self) -> LisaClient:
         return self
 
     def __exit__(self, *_exc: object) -> None:

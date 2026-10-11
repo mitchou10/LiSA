@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import pytest
-
 from app.tasks import get_service, scan
 
 
@@ -111,9 +108,27 @@ class TestScanTaskIntegration:
 
     def test_scan_task_realistic_pii_detection(self, mock_env, mock_gliner_model):
         entities = [
-            {"text": "John Smith", "label": "person", "start": 0, "end": 10, "score": 0.96},
-            {"text": "john@example.com", "label": "email address", "start": 20, "end": 36, "score": 0.99},
-            {"text": "555-1234", "label": "phone number", "start": 40, "end": 48, "score": 0.92},
+            {
+                "text": "John Smith",
+                "label": "person",
+                "start": 0,
+                "end": 10,
+                "score": 0.96,
+            },
+            {
+                "text": "john@example.com",
+                "label": "email address",
+                "start": 20,
+                "end": 36,
+                "score": 0.99,
+            },
+            {
+                "text": "555-1234",
+                "label": "phone number",
+                "start": 40,
+                "end": 48,
+                "score": 0.92,
+            },
         ]
         mock_gliner_model.predict_entities.return_value = entities
 
@@ -127,11 +142,23 @@ class TestScanTaskIntegration:
     def test_scan_task_multipage_document(self, mock_env, mock_gliner_model):
         mock_gliner_model.predict_entities.side_effect = [
             [
-                {"text": "Jane Doe", "label": "person", "start": 0, "end": 8, "score": 0.95}
+                {
+                    "text": "Jane Doe",
+                    "label": "person",
+                    "start": 0,
+                    "end": 8,
+                    "score": 0.95,
+                }
             ],
             [],
             [
-                {"text": "sk-secret123", "label": "API key", "start": 5, "end": 17, "score": 0.99}
+                {
+                    "text": "sk-secret123",
+                    "label": "API key",
+                    "start": 5,
+                    "end": 17,
+                    "score": 0.99,
+                }
             ],
         ]
 

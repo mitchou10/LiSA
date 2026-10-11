@@ -25,45 +25,47 @@ GLINER_THRESHOLD: float = float(os.getenv("GLINER_THRESHOLD", "0.5"))
 # These are the "zero-shot" labels GLiNER will search for in the text.
 GLINER_LABELS: str = os.getenv(
     "GLINER_LABELS",
-    ",".join([
-        # PII
-        "person",
-        "email address",
-        "phone number",
-        "physical address",
-        "date of birth",
-        "national ID",
-        # Police / Justice
-        "police report",
-        "police officer",
-        "suspect",
-        "victim",
-        "witness",
-        "criminal record",
-        "investigation information",
-        "evidence",
-        # Santé
-        "medical information",
-        "medical record",
-        "medical diagnosis",
-        "medical history",
-        "medication",
-        "prescription",
-        # Juridique
-        "legal information",
-        "court case",
-        "court decision",
-        "lawsuit",
-        "legal proceeding",
-        "lawyer",
-        "judge",
-        "prosecutor",
-        # Secrets
-        "password",
-        "API key",
-        "access token",
-        "private key",
-    ]),
+    ",".join(
+        [
+            # PII
+            "person",
+            "email address",
+            "phone number",
+            "physical address",
+            "date of birth",
+            "national ID",
+            # Police / Justice
+            "police report",
+            "police officer",
+            "suspect",
+            "victim",
+            "witness",
+            "criminal record",
+            "investigation information",
+            "evidence",
+            # Santé
+            "medical information",
+            "medical record",
+            "medical diagnosis",
+            "medical history",
+            "medication",
+            "prescription",
+            # Juridique
+            "legal information",
+            "court case",
+            "court decision",
+            "lawsuit",
+            "legal proceeding",
+            "lawyer",
+            "judge",
+            "prosecutor",
+            # Secrets
+            "password",
+            "API key",
+            "access token",
+            "private key",
+        ]
+    ),
 )
 
 # -- Remote detection profile (labels/categories edited from the LiSA UI) ---

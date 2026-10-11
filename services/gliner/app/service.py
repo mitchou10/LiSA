@@ -12,9 +12,8 @@ import logging
 import uuid
 from typing import Any
 
-from worker.core.services.base import BaseService, TaskStatus
-
 from worker.core.client.detection_profiles import DetectionProfileClient
+from worker.core.services.base import BaseService, TaskStatus
 
 from app import config
 from app.profile import Profile, ProfileProvider
@@ -128,7 +127,16 @@ class GlinerService(BaseService):
         "Detects PII, police, health, legal, and secret entities from a "
         "configurable list of labels."
     )
-    tags = ["gliner", "ner", "pii", "police", "health", "legal", "secrets", "multilingual"]
+    tags = [
+        "gliner",
+        "ner",
+        "pii",
+        "police",
+        "health",
+        "legal",
+        "secrets",
+        "multilingual",
+    ]
     type = "analyser"
     queue = config.CELERY_QUEUE
     input_schema = INPUT_SCHEMA
@@ -148,7 +156,7 @@ class GlinerService(BaseService):
         fetch = None
         if config.profile_enabled():
             client = DetectionProfileClient()
-            fetch = lambda: client.get_active_config(config.PROFILE_KEY)  # noqa: E731
+            fetch = lambda: client.get_active_config(config.PROFILE_KEY)
         return ProfileProvider(
             service_key=config.PROFILE_KEY,
             fallback=self._default_profile,
@@ -182,9 +190,7 @@ class GlinerService(BaseService):
         """Parse the comma-separated label list from config."""
         if self._labels is None:
             self._labels = [
-                lbl.strip()
-                for lbl in config.GLINER_LABELS.split(",")
-                if lbl.strip()
+                lbl.strip() for lbl in config.GLINER_LABELS.split(",") if lbl.strip()
             ]
         return self._labels
 
@@ -202,9 +208,7 @@ class GlinerService(BaseService):
     def _scan_page(self, content: str) -> dict[str, Any]:
         """Run GLiNER on one page and return a detection dict."""
         profile = self._profiles.get()
-        rules = {
-            e["label"]: e for e in profile["entities"] if e.get("enabled", True)
-        }
+        rules = {e["label"]: e for e in profile["entities"] if e.get("enabled", True)}
         labels = list(rules)
         global_threshold = float(profile["threshold"])
 
@@ -213,7 +217,11 @@ class GlinerService(BaseService):
             # Query with the lowest threshold in play, then filter per label.
             floor = min(
                 [global_threshold]
-                + [r["threshold"] for r in rules.values() if r.get("threshold") is not None]
+                + [
+                    r["threshold"]
+                    for r in rules.values()
+                    if r.get("threshold") is not None
+                ]
             )
             entities_raw = self._get_model().predict_entities(
                 content, labels, threshold=floor
@@ -318,7 +326,7 @@ class GlinerService(BaseService):
                 )
                 progress = round((index + 1) / total * 100)
                 self.update_task(task_id, progress=progress)
-        except Exception as exc:  # noqa: BLE001 - mark the task failed and re-raise
+        except Exception as exc:
             self.update_task(task_id, status=TaskStatus.ERROR, error=str(exc))
             raise
 

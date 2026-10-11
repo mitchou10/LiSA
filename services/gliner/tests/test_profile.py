@@ -16,8 +16,15 @@ def _config(*entities, threshold=0.5):
 
 
 def _entity(label, category="PII", **kw):
-    return {"label": label, "category": category, "severity": "medium",
-            "action": "redact", "enabled": True, "threshold": None, **kw}
+    return {
+        "label": label,
+        "category": category,
+        "severity": "medium",
+        "action": "redact",
+        "enabled": True,
+        "threshold": None,
+        **kw,
+    }
 
 
 class TestProfileProvider:
@@ -32,7 +39,9 @@ class TestProfileProvider:
             calls.append(1)
             return 3, _config(_entity("iban"))
 
-        provider = ProfileProvider(service_key="k", fallback=lambda: DEFAULT, fetch=fetch)
+        provider = ProfileProvider(
+            service_key="k", fallback=lambda: DEFAULT, fetch=fetch
+        )
         assert provider.get()["version"] == 3
         provider.get()
         assert len(calls) == 1
@@ -41,7 +50,9 @@ class TestProfileProvider:
         def fetch():
             raise ConnectionError("down")
 
-        provider = ProfileProvider(service_key="k", fallback=lambda: DEFAULT, fetch=fetch)
+        provider = ProfileProvider(
+            service_key="k", fallback=lambda: DEFAULT, fetch=fetch
+        )
         assert provider.get() is DEFAULT
 
     def test_keeps_last_profile_when_refresh_fails(self):
@@ -52,7 +63,9 @@ class TestProfileProvider:
                 return 1, _config(_entity("iban"))
             raise ConnectionError("down")
 
-        provider = ProfileProvider(service_key="k", fallback=lambda: DEFAULT, fetch=fetch)
+        provider = ProfileProvider(
+            service_key="k", fallback=lambda: DEFAULT, fetch=fetch
+        )
         assert provider.get()["version"] == 1
         state["ok"] = False
         assert provider.refresh() is False
@@ -71,7 +84,9 @@ class TestProfileProvider:
 
     def test_matches_only_own_service_key(self):
         provider = ProfileProvider(service_key="gliner-ner", fallback=lambda: DEFAULT)
-        assert provider._matches(json.dumps({"service_key": "gliner-ner", "version": 2}))
+        assert provider._matches(
+            json.dumps({"service_key": "gliner-ner", "version": 2})
+        )
         assert not provider._matches(json.dumps({"service_key": "other"}))
         assert not provider._matches("not json")
         assert not provider._matches(None)
@@ -133,18 +148,20 @@ class TestServiceUsesProfile:
         assert mock_gliner_model.predict_entities.call_args.args[1] == ["iban"]
 
     def test_no_enabled_label_skips_model(self, mock_env, mock_gliner_model):
-        service = self._service(_config(_entity("iban", enabled=False)), mock_gliner_model)
+        service = self._service(
+            _config(_entity("iban", enabled=False)), mock_gliner_model
+        )
         result = service._scan_page("text")
         assert result["flagged"] is False
         mock_gliner_model.predict_entities.assert_not_called()
 
-    def test_category_severity_action_come_from_profile(self, mock_env, mock_gliner_model):
+    def test_category_severity_action_come_from_profile(
+        self, mock_env, mock_gliner_model
+    ):
         mock_gliner_model.predict_entities.return_value = [
             {"text": "FR76", "label": "iban", "start": 0, "end": 4, "score": 0.9}
         ]
-        profile = _config(
-            _entity("iban", "FINANCE", severity="high", action="block")
-        )
+        profile = _config(_entity("iban", "FINANCE", severity="high", action="block"))
         result = self._service(profile, mock_gliner_model)._scan_page("FR76")
         assert result["entities"][0]["type"] == "FINANCE"
         assert result["severity"] == "high"
@@ -158,14 +175,18 @@ class TestServiceUsesProfile:
             {"text": "b", "label": "person", "start": 2, "end": 3, "score": 0.7},
         ]
         profile = _config(
-            _entity("iban", threshold=0.9), _entity("person", threshold=0.3), threshold=0.6
+            _entity("iban", threshold=0.9),
+            _entity("person", threshold=0.3),
+            threshold=0.6,
         )
         result = self._service(profile, mock_gliner_model)._scan_page("a b")
         assert [e["label"] for e in result["entities"]] == ["person"]
         # The model is queried with the lowest threshold in play.
         assert mock_gliner_model.predict_entities.call_args.kwargs["threshold"] == 0.3
 
-    def test_allow_action_is_reported_but_not_flagged(self, mock_env, mock_gliner_model):
+    def test_allow_action_is_reported_but_not_flagged(
+        self, mock_env, mock_gliner_model
+    ):
         mock_gliner_model.predict_entities.return_value = [
             {"text": "Bob", "label": "person", "start": 0, "end": 3, "score": 0.9}
         ]
