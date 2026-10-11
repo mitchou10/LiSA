@@ -22,8 +22,32 @@ class Classifier(Protocol):
     def name(self) -> str:
         """Identifier of the model, reported in the output."""
 
-    def classify(self, text: str, task: ClassificationTask) -> list[str]:
-        """Labels of ``task`` that apply to ``text`` (one, or several if multi)."""
+    def classify(
+        self, text: str, task: ClassificationTask
+    ) -> list[tuple[str, float | None]]:
+        """``(label, probability)`` of ``task`` that apply to ``text``.
+
+        One pair in single-label mode, several if multi. The probability is
+        ``None`` when the model does not give one.
+        """
+
+
+def parse_labels(result: Any) -> list[tuple[str, float | None]]:
+    """GLiNER2's answer for one task as ``(label, confidence)`` pairs.
+
+    With ``include_confidence`` it is ``{"label", "confidence"}`` (or a list of
+    them); without, a label (or a list of labels).
+    """
+    if result is None:
+        return []
+    pairs = []
+    for item in result if isinstance(result, list) else [result]:
+        label = item.get("label") if isinstance(item, dict) else item
+        if not isinstance(label, str):
+            continue
+        confidence = item.get("confidence") if isinstance(item, dict) else None
+        pairs.append((label, float(confidence) if confidence is not None else None))
+    return pairs
 
 
 class Gliner2Classifier:
@@ -51,7 +75,9 @@ class Gliner2Classifier:
             self._model = AutoExtractor.from_pretrained(self._model_name)
         return self._model
 
-    def classify(self, text: str, task: ClassificationTask) -> list[str]:
+    def classify(
+        self, text: str, task: ClassificationTask
+    ) -> list[tuple[str, float | None]]:
         # GLiNER2 takes the labels as a list, or as {label: description}.
         labels: list[str] | dict[str, str] = (
             {lb.name: lb.description or lb.name for lb in task.labels}
@@ -80,12 +106,11 @@ class Gliner2Classifier:
                 schema,
                 chunk_size=settings.CLASSIFIER_CHUNK_SIZE,
                 chunk_overlap=settings.CLASSIFIER_CHUNK_OVERLAP,
+                include_confidence=True,
             )
             .get(task.name)
         )
-        if result is None:
-            return []
-        return [result] if isinstance(result, str) else list(result)
+        return parse_labels(result)
 
 
 BACKENDS: dict[str, type[Classifier]] = {"gliner2": Gliner2Classifier}

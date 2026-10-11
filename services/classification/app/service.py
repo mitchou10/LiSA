@@ -54,26 +54,31 @@ class ClassificationService(BaseService):
             self._classifier = get_classifier()
         return self._classifier
 
-    def _classify_task(self, text: str, task: ClassificationTask) -> list[str]:
+    def _classify_task(
+        self, text: str, task: ClassificationTask
+    ) -> list[tuple[str, float | None]]:
         # Whatever the model returns, only the labels asked for are kept.
-        labels = self.classifier.classify(text, task)
-        return [label for label in labels if label in task.label_names]
+        found = self.classifier.classify(text, task)
+        return [(label, score) for label, score in found if label in task.label_names]
 
     def classify_page(
         self, page: InputPage, tasks: list[ClassificationTask]
     ) -> PageResult:
-        results = [
-            TaskResult(
-                name=task.name,
-                multi_label=task.multi_label,
-                labels=(
-                    self._classify_task(page.content, task)
-                    if page.content.strip()
-                    else []
-                ),
+        results = []
+        for task in tasks:
+            found = (
+                self._classify_task(page.content, task) if page.content.strip() else []
             )
-            for task in tasks
-        ]
+            results.append(
+                TaskResult(
+                    name=task.name,
+                    multi_label=task.multi_label,
+                    labels=[label for label, _ in found],
+                    scores={
+                        label: score for label, score in found if score is not None
+                    },
+                )
+            )
         return PageResult(page_number=page.page_number, classifications=results)
 
     def process(self, input_data: Any, task_id: str | None = None) -> dict[str, Any]:

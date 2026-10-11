@@ -23,7 +23,8 @@ class FakeClassifier:
         self.calls.append((task.name, text))
         for (name, keyword), labels in self.answers.items():
             if name == task.name and keyword in text:
-                return labels
+                # A label alone gets a fixed probability; (label, score) is kept.
+                return [(lb, 0.9) if isinstance(lb, str) else lb for lb in labels]
         return []
 
 
@@ -68,8 +69,18 @@ class TestProcess:
         first, second = result["pages"]
         assert first["page_number"] == 1
         assert first["classifications"] == [
-            {"name": "doc_type", "multi_label": False, "labels": ["invoice"]},
-            {"name": "topics", "multi_label": True, "labels": ["finance", "legal"]},
+            {
+                "name": "doc_type",
+                "multi_label": False,
+                "labels": ["invoice"],
+                "scores": {"invoice": 0.9},
+            },
+            {
+                "name": "topics",
+                "multi_label": True,
+                "labels": ["finance", "legal"],
+                "scores": {"finance": 0.9, "legal": 0.9},
+            },
         ]
         assert second["classifications"][0]["labels"] == ["contract"]
         assert second["classifications"][1]["labels"] == []
@@ -181,7 +192,7 @@ class TestLabelDescriptions:
                 "other",
             ],
         )
-        assert clf.classify("text", task) == ["invoice"]
+        assert clf.classify("text", task) == [("invoice", None)]
         # A label without description falls back to its own name.
         args = model.classify_text_long.call_args.args
         assert args == (
@@ -285,7 +296,7 @@ class TestBackends:
         clf = Gliner2Classifier("m")
         clf._model = model
         task = ClassificationTask(name="doc_type", labels=["invoice", "other"])
-        assert clf.classify("text", task) == ["invoice"]
+        assert clf.classify("text", task) == [("invoice", None)]
         assert model.classify_text_long.call_args.args == (
             "text",
             {"doc_type": ["invoice", "other"]},
@@ -300,7 +311,7 @@ class TestBackends:
         task = ClassificationTask(
             name="topics", labels=["health", "legal"], multi_label=True, threshold=0.7
         )
-        assert clf.classify("text", task) == ["health", "legal"]
+        assert clf.classify("text", task) == [("health", None), ("legal", None)]
         schema = model.classify_text_long.call_args.args[1]
         assert schema == {
             "topics": {
@@ -332,3 +343,71 @@ def test_settings_celery_urls_default_to_redis(monkeypatch):
     monkeypatch.delenv("CELERY_RESULT_BACKEND", raising=False)
     cfg = Settings(REDIS_URL="redis://r:6379/1")
     assert cfg.CELERY_BROKER_URL == cfg.CELERY_RESULT_BACKEND == "redis://r:6379/1"
+
+
+class TestProbabilities:
+    def test_the_model_is_asked_for_its_confidence_and_it_is_returned(self, mocker):
+        model = mocker.Mock()
+        model.classify_text_long.return_value = {
+            "topics": [
+                {"label": "finance", "confidence": 0.93},
+                {"label": "legal", "confidence": 0.41},
+            ]
+        }
+        clf = Gliner2Classifier("m")
+        clf._model = model
+        task = ClassificationTask(
+            name="topics", labels=["finance", "legal"], multi_label=True
+        )
+        assert clf.classify("x", task) == [("finance", 0.93), ("legal", 0.41)]
+        assert model.classify_text_long.call_args.kwargs["include_confidence"] is True
+
+    def test_a_single_label_answer_carries_its_probability(self, mocker):
+        model = mocker.Mock()
+        model.classify_text_long.return_value = {
+            "doc_type": {"label": "invoice", "confidence": 0.87}
+        }
+        clf = Gliner2Classifier("m")
+        clf._model = model
+        task = ClassificationTask(name="doc_type", labels=["invoice", "other"])
+        assert clf.classify("x", task) == [("invoice", 0.87)]
+
+    def test_parse_labels_tolerates_every_shape(self):
+        from app.classifiers import parse_labels
+
+        assert parse_labels(None) == []
+        assert parse_labels("a") == [("a", None)]
+        assert parse_labels(["a", "b"]) == [("a", None), ("b", None)]
+        assert parse_labels({"label": "a", "confidence": 1}) == [("a", 1.0)]
+        assert parse_labels([{"label": "a"}, {"nope": 1}]) == [("a", None)]
+
+    def test_the_output_has_a_score_per_returned_label(self, service, fake):
+        fake.answers[("topics", "money")] = [("finance", 0.93), ("legal", 0.41)]
+        result = service.process(
+            {"pages": [{"content": "money"}], "classifications": [TASKS[1]]}
+        )
+        task = result["pages"][0]["classifications"][0]
+        assert task["labels"] == ["finance", "legal"]
+        assert task["scores"] == {"finance": 0.93, "legal": 0.41}
+
+    def test_labels_the_model_invents_get_no_score(self, service, fake):
+        fake.answers[("doc_type", "weird")] = [("not-a-label", 0.99), ("invoice", 0.5)]
+        result = service.process(
+            {"pages": [{"content": "weird"}], "classifications": TASKS[:1]}
+        )
+        task = result["pages"][0]["classifications"][0]
+        assert task["labels"] == ["invoice"] and task["scores"] == {"invoice": 0.5}
+
+    def test_no_score_when_the_model_gives_none(self, mocker):
+        model = mocker.Mock()
+        model.classify_text_long.return_value = {"doc_type": "invoice"}
+        clf = Gliner2Classifier("m")
+        clf._model = model
+        svc = ClassificationService.__new__(ClassificationService)
+        svc._classifier = clf
+        svc.update_task = mocker.Mock()
+        result = svc.process(
+            {"pages": [{"content": "x"}], "classifications": TASKS[:1]}
+        )
+        task = result["pages"][0]["classifications"][0]
+        assert task["labels"] == ["invoice"] and task["scores"] == {}
