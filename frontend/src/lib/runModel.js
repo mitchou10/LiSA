@@ -32,6 +32,10 @@ export function buildPages(run, source) {
   const relations = byPage(done(run.steps, "relation"), "relations");
   const safety = byPage(done(run.steps, "safety"), "safety");
   const classes = byPage(done(run.steps, "classification"), "classifications");
+  // What the anonymize worker returned: stars, with a [LABEL] marker per entity.
+  const anonymized = new Map(
+    (done(run.steps, "anonymize")?.output?.pages ?? []).map((p) => [p.page_number, p.content])
+  );
   const unsafe = new Map(
     (done(run.steps, "safety")?.output?.pages ?? []).map((p) => [p.page_number, p.unsafe])
   );
@@ -52,10 +56,13 @@ export function buildPages(run, source) {
     safety: safety.get(page.number) ?? [],
     unsafe: unsafe.get(page.number) ?? false,
     classifications: classes.get(page.number) ?? [],
+    anonymized: anonymized.get(page.number) ?? null,
   }));
 }
 
 // Stable colour per name (a category, a relation): same name, same colour.
+export const isAnonymizing = (run) => !!run?.steps.some((s) => s.step === "anonymize");
+
 export function colorFor(name) {
   let hash = 0;
   for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) % 360;

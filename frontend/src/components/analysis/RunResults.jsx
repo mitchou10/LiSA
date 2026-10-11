@@ -51,6 +51,7 @@ function NerResult({ output, t }) {
           >
             {e.text}
             <span className="ml-1.5 opacity-70">{e.label}</span>
+            <span className="ml-1.5 tabular-nums opacity-70">{pct(e.score)}</span>
           </Badge>
         ))}
       </div>
@@ -88,7 +89,14 @@ function ClassificationResult({ output, t }) {
           <li key={c.name} className="flex flex-wrap items-center gap-1.5">
             <span className="font-medium">{c.name}</span>
             {c.labels.length ? (
-              c.labels.map((l) => <Badge key={l}>{l}</Badge>)
+              c.labels.map((l) => (
+                <Badge key={l}>
+                  {l}
+                  {c.scores?.[l] != null && (
+                    <span className="ml-1.5 tabular-nums opacity-70">{pct(c.scores[l])}</span>
+                  )}
+                </Badge>
+              ))
             ) : (
               <span className="text-xs text-muted-foreground">{t("run.noLabel")}</span>
             )}
@@ -140,7 +148,17 @@ function SafetyResult({ output, t }) {
   );
 }
 
+function AnonymizeResult({ output, t }) {
+  const pages = output?.pages ?? [];
+  return (
+    <p className="text-sm">
+      {pages.length} {t("run.pagesAnonymized")}
+    </p>
+  );
+}
+
 const RESULT = {
+  anonymize: AnonymizeResult,
   parser: ParserResult,
   ner: NerResult,
   relation: RelationResult,
