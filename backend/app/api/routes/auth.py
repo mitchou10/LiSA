@@ -4,12 +4,11 @@ import httpx
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 
-from app.api.deps import CurrentUserDep, UserServiceDep
+from app.api.deps import CurrentUserDep
 from app.config import get_settings
 from app.core import oidc
-from app.core.security import create_access_token
 from app.core.session import PendingAuth
-from app.schemas.auth import CurrentUser, LoginRequest, Token
+from app.schemas.auth import CurrentUser
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 settings = get_settings()
@@ -18,39 +17,15 @@ LOGIN_RATE_LIMIT = 20
 LOGIN_RATE_WINDOW_SECONDS = 60
 
 
-def _require_keycloak() -> None:
-    if settings.auth_provider != "keycloak":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
-
-
 @router.get("/config")
 async def auth_config() -> dict:
     """Tell the frontend which login flow to present."""
-    return {"provider": settings.auth_provider}
-
-
-@router.post("/login", response_model=Token)
-async def login(payload: LoginRequest, users: UserServiceDep) -> Token:
-    """Local provider: username/password -> JWT access token."""
-    if settings.auth_provider != "local":
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found.")
-    user = await users.authenticate(payload.username, payload.password)
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    token = create_access_token(
-        subject=user.id, username=user.username, role=user.role.value
-    )
-    return Token(access_token=token)
+    return {"provider": "keycloak"}
 
 
 @router.get("/login")
 async def oidc_login(request: Request, redirect: str = "/") -> RedirectResponse:
     """Keycloak (BFF): redirect the browser to the realm login page."""
-    _require_keycloak()
     store = oidc.get_session_store()
     client_ip = request.client.host if request.client else "unknown"
     if not await store.check_rate_limit(
@@ -75,7 +50,6 @@ async def oidc_login(request: Request, redirect: str = "/") -> RedirectResponse:
 @router.get("/callback")
 async def oidc_callback(code: str, state: str) -> RedirectResponse:
     """Keycloak (BFF): exchange the code server-side and open a session."""
-    _require_keycloak()
     store = oidc.get_session_store()
     pending = await store.pop_pending(state)
     if pending is None:
@@ -114,7 +88,6 @@ async def oidc_callback(code: str, state: str) -> RedirectResponse:
 @router.post("/logout")
 async def logout(request: Request, response: Response) -> dict:
     """End the BFF session and return the Keycloak end-session URL."""
-    _require_keycloak()
     origin = request.headers.get("origin")
     if origin is None or origin.rstrip("/") != settings.frontend_url.rstrip("/"):
         raise HTTPException(

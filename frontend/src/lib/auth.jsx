@@ -1,12 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import {
-  getAuthConfig,
-  getMe,
-  oidcLogout,
-  getToken,
-  login as apiLogin,
-  logout as apiLogout,
-} from "./api";
+import { getMe, oidcLogout } from "./api";
 
 const AuthContext = createContext(null);
 
@@ -21,10 +14,11 @@ const MOCK_USER = {
   role: "admin",
 };
 
+// Authentication is Keycloak only: the session lives in an HttpOnly cookie set
+// by the backend, so the only thing to do here is ask who the user is.
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [provider, setProvider] = useState("local");
 
   useEffect(() => {
     let active = true;
@@ -35,75 +29,40 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    (async () => {
-      let mode = "local";
-      try {
-        mode = (await getAuthConfig()).provider;
-      } catch {
-        /* backend unreachable: fall back to local flow */
-      }
-      if (!active) return;
-      setProvider(mode);
-      // Local mode keeps a bearer token; Keycloak mode relies on the cookie.
-      if (mode === "local" && !getToken()) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const me = await getMe();
+    getMe()
+      .then((me) => {
         if (active) setUser(me);
-      } catch {
-        if (active) {
-          apiLogout();
-          setUser(null);
-        }
-      } finally {
+      })
+      .catch(() => {
+        if (active) setUser(null);
+      })
+      .finally(() => {
         if (active) setLoading(false);
-      }
-    })();
+      });
     return () => {
       active = false;
     };
   }, []);
 
   const value = useMemo(() => {
-    const signIn = async (username, password) => {
-      if (BYPASS_AUTH) {
-        setUser(MOCK_USER);
-        return MOCK_USER;
-      }
-      await apiLogin({ username, password });
-      const me = await getMe();
-      setUser(me);
-      return me;
-    };
     const signOut = async () => {
-      if (BYPASS_AUTH) {
-        setUser(null);
-        return;
-      }
-      if (provider === "keycloak") {
-        setUser(null);
-        try {
-          window.location.href = await oidcLogout();
-        } catch {
-          window.location.href = "/login";
-        }
-        return;
-      }
-      apiLogout();
       setUser(null);
+      if (BYPASS_AUTH) return;
+      try {
+        // Ends the backend session, then Keycloak's own.
+        window.location.href = await oidcLogout();
+      } catch {
+        window.location.href = "/login";
+      }
     };
     return {
       user,
       loading,
       isAuthenticated: !!user,
-      provider,
       isAdmin: user?.role === "admin",
-      signIn,
       signOut,
     };
-  }, [user, loading, provider]);
+  }, [user, loading]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

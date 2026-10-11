@@ -21,7 +21,7 @@ const MENU_LINKS = [
 
 export default function UserMenu() {
   const { t } = useI18n();
-  const { user, isAdmin, signOut, provider } = useAuth();
+  const { user, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -101,7 +101,6 @@ export default function UserMenu() {
               onClick={() => {
                 setOpen(false);
                 signOut();
-                if (provider !== "keycloak") navigate("/login");
               }}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >

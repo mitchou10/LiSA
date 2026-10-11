@@ -30,24 +30,14 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: list[str] = ["*"]
 
-    # Authentication (local JWT)
-    jwt_secret: str = "change-me-in-production-with-a-long-random-secret"
-    jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60 * 12  # 12 hours
-
     # Machine-to-machine token used by the worker (and other backend services)
     # to call the API without a user login. When set, a request presenting this
     # value as a Bearer token is treated as a service account with admin rights.
     service_token: str | None = None
 
-    # Default admin seeded at startup if it does not exist.
-    admin_username: str = "admin"
-    admin_password: str = "admin"
-    admin_email: str | None = None
-
-    # Auth provider: "local" (JWT issued by this app) or "keycloak" (validate
-    # OIDC bearer tokens against a Keycloak realm via its JWKS endpoint).
-    auth_provider: str = "local"
+    # Authentication is Keycloak only: browsers log in through the BFF below,
+    # scripts present a Keycloak access token (verified against the realm's
+    # JWKS), workers present the service token.
     keycloak_server_url: str | None = None  # e.g. https://kc.example.com
     # Optional in-network URL used to fetch the JWKS (defaults to server URL).
     keycloak_internal_url: str | None = None

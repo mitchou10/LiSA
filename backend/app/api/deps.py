@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.keycloak import extract_roles, verify_keycloak_token
 from app.core.oidc import load_session
-from app.core.security import decode_access_token
 from app.database import get_session
 from app.models.enums import UserRole
 from app.schemas.auth import CurrentUser
@@ -16,7 +15,6 @@ from app.services.analytics import AnalyticsService
 from app.services.detection_profile import DetectionProfileService
 from app.services.service import ServiceService
 from app.services.task import TaskService
-from app.services.user import UserService
 
 settings = get_settings()
 
@@ -35,10 +33,6 @@ def get_analytics_service(session: SessionDep) -> AnalyticsService:
     return AnalyticsService(session)
 
 
-def get_user_service(session: SessionDep) -> UserService:
-    return UserService(session)
-
-
 def get_detection_profile_service(session: SessionDep) -> DetectionProfileService:
     return DetectionProfileService(session)
 
@@ -46,7 +40,6 @@ def get_detection_profile_service(session: SessionDep) -> DetectionProfileServic
 ServiceServiceDep = Annotated[ServiceService, Depends(get_service_service)]
 TaskServiceDep = Annotated[TaskService, Depends(get_task_service)]
 AnalyticsServiceDep = Annotated[AnalyticsService, Depends(get_analytics_service)]
-UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 DetectionProfileServiceDep = Annotated[
     DetectionProfileService, Depends(get_detection_profile_service)
 ]
@@ -95,15 +88,11 @@ async def _user_from_session_cookie(request: Request) -> CurrentUser | None:
 
 
 async def _resolve_user(
-    creds: HTTPAuthorizationCredentials | None,
-    users: UserService,
-    request: Request,
+    creds: HTTPAuthorizationCredentials | None, request: Request
 ) -> CurrentUser | None:
-    """Resolve the caller from a bearer token (local / Keycloak) or BFF cookie."""
+    """Resolve the caller: BFF session cookie, service token or Keycloak bearer."""
     if creds is None or not creds.credentials:
-        if settings.auth_provider == "keycloak":
-            return await _user_from_session_cookie(request)
-        return None
+        return await _user_from_session_cookie(request)
     token = creds.credentials
 
     # Machine-to-machine service token (worker / backend services).
@@ -115,47 +104,26 @@ async def _resolve_user(
             is_active=True,
         )
 
-    if settings.auth_provider == "keycloak":
-        try:
-            claims = verify_keycloak_token(token)
-        except jwt.PyJWTError:
-            return None
-        roles = extract_roles(claims)
-        role = (
-            UserRole.ADMIN if settings.keycloak_admin_role in roles else UserRole.USER
-        )
-        return CurrentUser(
-            id=claims.get("sub", ""),
-            username=claims.get("preferred_username")
-            or claims.get("username")
-            or claims.get("sub", ""),
-            role=role,
-        )
-
-    # Local provider: validate our own JWT and confirm the account is active.
+    # Keycloak access token (scripts, SDK): signature, issuer and audience.
     try:
-        payload = decode_access_token(token)
-    except jwt.PyJWTError:
+        claims = verify_keycloak_token(token)
+    except (jwt.PyJWTError, RuntimeError):
+        # Invalid token, JWKS unreachable, or Keycloak not configured: anonymous.
         return None
-    username = payload.get("username")
-    if not username:
-        return None
-    user = await users.get_by_username(username)
-    if user is None or not user.is_active:
-        return None
+    roles = extract_roles(claims)
+    role = UserRole.ADMIN if settings.keycloak_admin_role in roles else UserRole.USER
     return CurrentUser(
-        id=str(user.id),
-        username=user.username,
-        role=user.role,
-        is_active=user.is_active,
+        id=claims.get("sub", ""),
+        username=claims.get("preferred_username")
+        or claims.get("username")
+        or claims.get("sub", ""),
+        role=role,
     )
 
 
-async def get_current_user(
-    request: Request, creds: BearerDep, users: UserServiceDep
-) -> CurrentUser:
+async def get_current_user(request: Request, creds: BearerDep) -> CurrentUser:
     """Require a valid authenticated user."""
-    user = await _resolve_user(creds, users, request)
+    user = await _resolve_user(creds, request)
     if user is None:
         raise _CREDENTIALS_EXC
     return user
