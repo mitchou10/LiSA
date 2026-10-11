@@ -31,6 +31,10 @@ app/
 - `POST /api/v1/tasks/{id}/revoke` — cancel.
 - `POST /api/v1/tasks/{id}/retry` — re-queue a failed/revoked task.
 - `DELETE /api/v1/tasks/{id}` — delete.
+- `POST /api/v1/files` (multipart `file`) — store a file in object storage (RustFS, S3 API), returns its id, size and sha256.
+- `GET /api/v1/files/{id}`, `GET /api/v1/files/{id}/content`, `DELETE /api/v1/files/{id}` — metadata / bytes / delete. Only the owner and admins (including the service token) can access a file.
+
+Uploaded files live in the `S3_BUCKET` bucket (`S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `MAX_UPLOAD_MB`); the database only keeps their metadata. Only the backend talks to the object store: workers fetch their input through `GET /files/{id}/content` with the service token. A task refers to a file with `{"file_id": "...", "filename": "..."}`; the parser deletes the source once parsed (`DELETE_SOURCE_AFTER_PARSE`).
 
 Interactive docs at `/docs`.
 

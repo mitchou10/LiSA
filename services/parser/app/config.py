@@ -26,3 +26,9 @@ MAX_PAGES: int = int(os.getenv("MAX_PAGES", "50"))
 # max(BLUR_MIN_RADIUS, smallest image side * BLUR_RATIO).
 BLUR_MIN_RADIUS: float = float(os.getenv("BLUR_MIN_RADIUS", "20"))
 BLUR_RATIO: float = float(os.getenv("BLUR_RATIO", "0.03"))
+
+# Delete the source file from object storage once it has been parsed, so only
+# the extracted text / boxes / screenshots remain.
+DELETE_SOURCE_AFTER_PARSE: bool = os.getenv(
+    "DELETE_SOURCE_AFTER_PARSE", "true"
+).lower() in ("1", "true", "yes")

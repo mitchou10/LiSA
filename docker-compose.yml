@@ -45,6 +45,10 @@ services:
       BACKEND_PUBLIC_URL: ${BACKEND_PUBLIC_URL:-http://localhost:8010}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      S3_ENDPOINT_URL: http://rustfs:9000
+      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+      S3_BUCKET: ${S3_BUCKET:-lisa-files}
     ports:
       - "${SERVER_PORT:-8010}:8000"
     depends_on:
@@ -53,6 +57,8 @@ services:
       redis:
         condition: service_healthy
       keycloak:
+        condition: service_healthy
+      rustfs:
         condition: service_healthy
     networks:
       - lisa
@@ -103,6 +109,45 @@ services:
     depends_on:
       keycloak-db:
         condition: service_healthy
+    networks:
+      - lisa
+
+  # RustFS runs as a non-root user (uid 10001); named volumes default to root
+  # ownership, so this one-shot fixes permissions before rustfs starts.
+  rustfs-volume-permissions:
+    image: alpine
+    volumes:
+      - rustfs-data:/data
+    command: chown -R 10001:10001 /data
+    restart: "no"
+    networks:
+      - lisa
+
+  # S3-compatible object storage for uploaded files. Only the backend talks to it.
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: lisa-rustfs
+    depends_on:
+      rustfs-volume-permissions:
+        condition: service_completed_successfully
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
+    volumes:
+      - rustfs-data:/data
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # Console
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
     networks:
       - lisa
 
@@ -220,6 +265,8 @@ volumes:
   db-data:
     driver: local
   keycloak-db-data:
+    driver: local
+  rustfs-data:
     driver: local
 
 networks:

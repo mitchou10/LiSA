@@ -25,6 +25,7 @@ from typing import Any
 
 from liteparse import LiteParse
 from PIL import Image, ImageFilter
+from worker.core.client import ClientError, FileClient
 from worker.core.services.base import BaseService, TaskStatus
 
 from app import config
@@ -40,11 +41,17 @@ INPUT_SCHEMA: dict[str, Any] = {
             "items": {
                 "type": "object",
                 "properties": {
+                    "file_id": {
+                        "type": "string",
+                        "description": "Id of a file uploaded with POST /files.",
+                    },
                     "filename": {"type": "string"},
                     "mime": {"type": ["string", "null"]},
-                    "data_base64": {"type": "string"},
+                    "data_base64": {
+                        "type": "string",
+                        "description": "Inline content, used when no file_id is given.",
+                    },
                 },
-                "required": ["filename", "data_base64"],
             },
         },
         "blur_screenshots": {"type": "boolean", "default": False},
@@ -214,9 +221,33 @@ class ParserService(BaseService):
     input_schema = INPUT_SCHEMA
     output_schema = OUTPUT_SCHEMA
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, *, files: FileClient | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        self._files = files or FileClient(kwargs.get("base_url"))
         self._parser: LiteParse | None = None
+
+    def _load_file(self, spec: dict[str, Any]) -> bytes:
+        """Bytes of one input file: from object storage, else inline base64."""
+        file_id = spec.get("file_id")
+        if file_id:
+            try:
+                return self._files.download(file_id)
+            except ClientError as exc:
+                raise ParserError(f"Cannot fetch file {file_id}: {exc}") from exc
+        return _decode(spec.get("data_base64", ""))
+
+    def _drop_sources(self, files: list[dict[str, Any]]) -> None:
+        """Remove the stored source files once parsed (best effort)."""
+        if not config.DELETE_SOURCE_AFTER_PARSE:
+            return
+        for spec in files:
+            file_id = spec.get("file_id")
+            if not file_id:
+                continue
+            try:
+                self._files.delete(file_id)
+            except ClientError as exc:
+                logger.warning("Could not delete source file %s: %s", file_id, exc)
 
     def _get_parser(self) -> LiteParse:
         if self._parser is None:
@@ -289,7 +320,7 @@ class ParserService(BaseService):
                 raise ParserError("No file provided (expected input 'files').")
             pages: list[dict[str, Any]] = []
             for index, f in enumerate(files):
-                data = _decode(f.get("data_base64", ""))
+                data = self._load_file(f)
                 for page in self.parse_file(
                     f.get("filename") or f"file-{index + 1}",
                     f.get("mime"),
@@ -312,6 +343,7 @@ class ParserService(BaseService):
             "error": None,
         }
         self._scrub_input(task_id, files)
+        self._drop_sources(files)
         self.update_task(
             task_id, status=TaskStatus.SUCCESS, progress=100, output_data=result
         )
@@ -323,7 +355,12 @@ class ParserService(BaseService):
             return
         summary = {
             "files": [
-                {"filename": f.get("filename"), "mime": f.get("mime")} for f in files
+                {
+                    "file_id": f.get("file_id"),
+                    "filename": f.get("filename"),
+                    "mime": f.get("mime"),
+                }
+                for f in files
             ]
         }
         try:

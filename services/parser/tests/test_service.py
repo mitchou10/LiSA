@@ -109,8 +109,54 @@ class TestProcess:
         assert statuses[0] == "running" and statuses[-1] == "success"
         # The uploaded bytes are removed from the stored task.
         scrub.assert_called_once_with(
-            "t1", {"input_data": {"files": [{"filename": "a.pdf", "mime": None}]}}
+            "t1",
+            {
+                "input_data": {
+                    "files": [{"file_id": None, "filename": "a.pdf", "mime": None}]
+                }
+            },
         )
+
+    def test_process_reads_from_storage_and_deletes_source(
+        self, service, pdf_bytes, mocker
+    ):
+        download = mocker.patch.object(
+            service._files, "download", return_value=pdf_bytes
+        )
+        delete = mocker.patch.object(service._files, "delete")
+        mocker.patch.object(service, "update_task")
+        mocker.patch.object(service._tasks, "update")
+        result = service.process(
+            {"files": [{"file_id": "f1", "filename": "a.pdf"}]}, task_id="t3"
+        )
+        download.assert_called_once_with("f1")
+        delete.assert_called_once_with("f1")
+        assert len(result["pages"]) == 2
+
+    def test_source_kept_when_deletion_disabled(
+        self, service, pdf_bytes, mocker, monkeypatch
+    ):
+        monkeypatch.setattr(config, "DELETE_SOURCE_AFTER_PARSE", False)
+        mocker.patch.object(service._files, "download", return_value=pdf_bytes)
+        delete = mocker.patch.object(service._files, "delete")
+        mocker.patch.object(service, "update_task")
+        mocker.patch.object(service._tasks, "update")
+        service.process({"files": [{"file_id": "f1", "filename": "a.pdf"}]})
+        delete.assert_not_called()
+
+    def test_missing_stored_file_fails_the_task(self, service, mocker):
+        from worker.core.client import ClientError
+
+        mocker.patch.object(
+            service._files, "download", side_effect=ClientError(404, "not found")
+        )
+        update = mocker.patch.object(service, "update_task")
+        mocker.patch.object(service._tasks, "update")
+        with pytest.raises(ParserError, match="Cannot fetch"):
+            service.process(
+                {"files": [{"file_id": "nope", "filename": "a.pdf"}]}, task_id="t4"
+            )
+        assert update.call_args.kwargs["status"] == "error"
 
     @pytest.mark.parametrize("payload", [None, {}, {"files": []}])
     def test_process_requires_files(self, service, payload):
