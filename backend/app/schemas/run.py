@@ -27,6 +27,12 @@ class RunCreate(BaseModel):
     relation_ids: list[UUID] | None = None
     safety_ids: list[UUID] | None = None
 
+    # Hide what was found, once the entities are known: the text comes back
+    # with every character as "*" and each entity as a [LABEL] marker, and the
+    # page images are replaced by a blurred copy with the labelled boxes.
+    # Needs entities to be applied.
+    anonymize: bool = False
+
     @model_validator(mode="after")
     def _one_source(self) -> RunCreate:
         has_text = bool(self.text and self.text.strip())
@@ -39,7 +45,7 @@ class RunStep(BaseModel):
     """One task of the run, in execution order."""
 
     task_id: UUID
-    # parser, ner, relation, classification or safety.
+    # parser, ner, relation, classification, safety or anonymize.
     step: str
     service: str
     status: TaskStatus

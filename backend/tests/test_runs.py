@@ -12,6 +12,7 @@ SERVICES = {
     "relation": "relation",
     "classification": "classification",
     "safety": "safety",
+    "anonymize-v2": "anonymize-v2",
 }
 
 
@@ -447,3 +448,338 @@ async def test_someone_elses_file_is_refused(
     await client.post(f"{P}/{pid}/entities", json={"label": "x"})
     resp = await client.post(f"{P}/{pid}/runs", json={"file_ids": [file["id"]]})
     assert resp.status_code == 404 and sent == []
+
+
+# -- anonymize (hide what was found, on request) --------------------------------------
+def _ner_output(entities_by_page):
+    return {
+        "pages": [
+            {"page_number": n, "entities": entities}
+            for n, entities in entities_by_page.items()
+        ]
+    }
+
+
+def _entity(label, text, start, flagged=True, bboxes=()):
+    return {
+        "id": "e0",
+        "label": label,
+        "text": text,
+        "start": start,
+        "end": start + len(text),
+        "flagged": flagged,
+        "bboxes": list(bboxes),
+    }
+
+
+async def _finish(client, headers, task_id, output, status="success"):
+    resp = await client.patch(
+        f"/api/v1/tasks/{task_id}",
+        json={"status": status, "progress": 100, "output_data": output},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+
+
+async def test_anonymize_waits_for_the_entities_then_hides_them(
+    client, admin_headers, project, sent
+):
+    resp = await run(
+        client,
+        admin_headers,
+        project,
+        text="Maria Garcia lives in Paris",
+        anonymize=True,
+    )
+    assert resp.status_code == 201, resp.text
+    steps = resp.json()["steps"]
+    assert [s["step"] for s in steps][-1] == "anonymize"
+    assert steps[-1]["waiting"] is True
+    assert resp.json()["steps"][-1]["service"] == "anonymize-v2"
+    # The analysis workers start now; the anonymizer does not.
+    assert "anonymize-v2" not in {c[0] for c in sent}
+
+    ner_id = next(s["task_id"] for s in steps if s["step"] == "ner")
+    sent.clear()
+    box = {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.05}
+    await _finish(
+        client,
+        admin_headers,
+        ner_id,
+        _ner_output(
+            {
+                1: [
+                    _entity("person", "Maria Garcia", 0, bboxes=[box]),
+                    _entity(
+                        "city", "Paris", 22, flagged=False
+                    ),  # "allow": reported, not hidden
+                ]
+            }
+        ),
+    )
+    (call,) = [c for c in sent if c[0] == "anonymize-v2"]
+    payload = call[2]
+    assert "awaiting" not in payload and "feed" not in payload
+    assert payload["blurred"] is True
+    # Anonymize is private: the text in the database is masked, and it is what
+    # this worker gets (blurred, every character is "*" anyway).
+    assert payload["pages"] == [
+        {"page_number": 1, "content": "***** ****** ***** ** *****", "s3_key": None}
+    ]
+    (page,) = payload["anonymized_pages"]
+    assert page["page_number"] == 1
+    # Offsets and labels are what the worker needs; the entity text is masked.
+    assert page["span"] == [
+        {"start": 0, "end": 12, "text": "***** ******", "label": "person"}
+    ]
+    assert page["bboxes"] == [{**box, "text": "***** ******", "label": "person"}]
+
+
+async def test_a_page_without_flagged_entity_is_left_alone(
+    client, admin_headers, project, sent
+):
+    resp = await run(client, admin_headers, project, text="one\ftwo", anonymize=True)
+    ner_id = next(s["task_id"] for s in resp.json()["steps"] if s["step"] == "ner")
+    sent.clear()
+    await _finish(
+        client,
+        admin_headers,
+        ner_id,
+        _ner_output({1: [], 2: [_entity("iban", "FR76", 0)]}),
+    )
+    payload = next(c[2] for c in sent if c[0] == "anonymize-v2")
+    assert [p["page_number"] for p in payload["anonymized_pages"]] == [2]
+    assert len(payload["pages"]) == 2  # every page is returned, hidden or not
+
+
+async def test_anonymize_of_a_file_carries_the_screenshot_keys(
+    client, admin_headers, project, sent
+):
+    file = await upload(client, admin_headers)
+    steps = (
+        await run(client, admin_headers, project, file_ids=[file["id"]], anonymize=True)
+    ).json()["steps"]
+    by_step = {s["step"]: s["task_id"] for s in steps}
+    pages = [{"page_number": 1, "content": "Pay FR76", "s3_key": "pages/t/1/1.png"}]
+    await _finish(client, admin_headers, by_step["parser"], {"pages": pages})
+    await _finish(
+        client,
+        admin_headers,
+        by_step["ner"],
+        _ner_output({1: [_entity("iban", "FR76", 4)]}),
+    )
+    payload = next(c[2] for c in sent if c[0] == "anonymize-v2")
+    assert payload["pages"] == [
+        {"page_number": 1, "content": "*** ****", "s3_key": "pages/t/1/1.png"}
+    ]
+    assert payload["anonymized_pages"][0]["span"][0]["label"] == "iban"
+
+
+async def test_anonymize_fails_when_the_entities_do(
+    client, admin_headers, project, sent
+):
+    resp = await run(client, admin_headers, project, text="x", anonymize=True)
+    body = resp.json()
+    ner_id = next(s["task_id"] for s in body["steps"] if s["step"] == "ner")
+    sent.clear()
+    await client.patch(
+        f"/api/v1/tasks/{ner_id}",
+        json={"status": "error", "error": "model down"},
+        headers=admin_headers,
+    )
+    assert "anonymize-v2" not in {c[0] for c in sent}
+    kids = (
+        await client.get(f"/api/v1/tasks/{body['id']}/children", headers=admin_headers)
+    ).json()
+    anonymize = next(k for k in kids if k["id"] == body["steps"][-1]["task_id"])
+    assert anonymize["status"] == "error" and "entity extraction" in anonymize["error"]
+
+
+async def test_anonymize_needs_entities(client, admin_headers, project, sent):
+    resp = await run(
+        client, admin_headers, project, text="x", entity_ids=[], anonymize=True
+    )
+    assert resp.status_code == 409 and "entit" in resp.json()["detail"]
+    assert sent == []
+
+
+async def test_anonymize_needs_its_worker(client, admin_headers, project, sent):
+    services = (await client.get("/api/v1/services", headers=admin_headers)).json()[
+        "items"
+    ]
+    anonymizer = next(s for s in services if s["name"] == "anonymize-v2")
+    await client.delete(f"/api/v1/services/{anonymizer['id']}", headers=admin_headers)
+    resp = await run(client, admin_headers, project, text="x", anonymize=True)
+    assert resp.status_code == 409 and "anonymize-v2" in resp.json()["detail"]
+    assert sent == []
+    # Without it requested, the run does not need that worker.
+    assert (await run(client, admin_headers, project, text="x")).status_code == 201
+
+
+async def test_a_run_does_not_anonymize_unless_asked(
+    client, admin_headers, project, sent
+):
+    steps = (await run(client, admin_headers, project, text="x")).json()["steps"]
+    assert "anonymize" not in [s["step"] for s in steps]
+
+
+# -- private runs: nothing readable in the database -------------------------------------
+from app.services.privacy import mask, mask_text_fields
+
+
+def test_mask_keeps_length_and_layout():
+    assert mask("Maria Garcia\nParis 75") == "***** ******\n***** **"
+    assert mask("") == ""
+
+
+def test_mask_text_fields_only_touches_what_documents_say():
+    data = {
+        "pages": [
+            {
+                "page_number": 1,
+                "content": "Pay FR76",
+                "s3_key": "pages/t/1/1.png",
+                "words": [{"text": "Pay", "x": 0.1, "start": 0, "end": 3}],
+            }
+        ],
+        "entities": [
+            {"label": "iban", "text": "FR76", "score": 0.9, "bboxes": [{"x": 0.2}]}
+        ],
+        "labels": ["invoice"],
+    }
+    out = mask_text_fields(data)
+    assert out["pages"][0]["content"] == "*** ****"
+    assert out["pages"][0]["words"] == [{"text": "***", "x": 0.1, "start": 0, "end": 3}]
+    assert out["pages"][0]["s3_key"] == "pages/t/1/1.png"
+    assert out["entities"] == [
+        {"label": "iban", "text": "****", "score": 0.9, "bboxes": [{"x": 0.2}]}
+    ]
+    assert out["labels"] == ["invoice"]
+    assert data["pages"][0]["content"] == "Pay FR76"  # the original is untouched
+
+
+async def _children(client, headers, run_id):
+    resp = await client.get(f"/api/v1/tasks/{run_id}/children", headers=headers)
+    return {k["id"]: k for k in resp.json()}
+
+
+async def test_a_private_text_run_stores_no_readable_text(
+    client, admin_headers, project, sent
+):
+    text = "Maria Garcia lives in Paris"
+    resp = await run(client, admin_headers, project, text=text, anonymize=True)
+    body = resp.json()
+    # The workers got the real text...
+    assert all(c[2]["pages"][0]["content"] == text for c in sent)
+    # ...the database did not keep it.
+    kids = await _children(client, admin_headers, body["id"])
+    for kid in kids.values():
+        if "pages" in kid["input_data"]:
+            assert kid["input_data"]["pages"][0]["content"] == mask(text)
+    parent = (
+        await client.get(f"/api/v1/tasks/{body['id']}", headers=admin_headers)
+    ).json()
+    assert text not in str(parent) and parent["input_data"]["anonymize"] is True
+
+
+async def test_a_private_output_is_stored_masked_but_the_next_worker_gets_it_clear(
+    client, admin_headers, project, sent
+):
+    file = await upload(client, admin_headers)
+    body = (
+        await run(client, admin_headers, project, file_ids=[file["id"]], anonymize=True)
+    ).json()
+    parser_id = next(s["task_id"] for s in body["steps"] if s["step"] == "parser")
+    sent.clear()
+    pages = [
+        {
+            "page_number": 1,
+            "content": "Maria Garcia pays FR76",
+            "s3_key": "pages/t/1/1.png",
+            "words": [{"text": "Maria", "x": 0.1, "start": 0, "end": 5}],
+        }
+    ]
+    await _finish(client, admin_headers, parser_id, {"pages": pages})
+
+    # Sent clear to the analysis workers...
+    for call in sent:
+        assert call[2]["pages"] == pages
+    # ...stored masked, for the parser's output and for each waiting task.
+    kids = await _children(client, admin_headers, body["id"])
+    stored = kids[parser_id]["output_data"]["pages"][0]
+    assert stored["content"] == mask("Maria Garcia pays FR76")
+    assert stored["words"][0]["text"] == "*****" and stored["words"][0]["x"] == 0.1
+    assert stored["s3_key"] == "pages/t/1/1.png"
+    for kid in kids.values():
+        if kid["id"] != parser_id and "pages" in kid["input_data"]:
+            assert kid["input_data"]["pages"][0]["content"] == mask(
+                "Maria Garcia pays FR76"
+            )
+    assert "Maria Garcia" not in str(kids)
+
+
+async def test_the_anonymizer_needs_no_clear_text(client, admin_headers, project, sent):
+    """Blurred, every character is "*": the masked stored text gives the same result."""
+    body = (
+        await run(
+            client,
+            admin_headers,
+            project,
+            text="Maria Garcia lives here",
+            anonymize=True,
+        )
+    ).json()
+    ner_id = next(s["task_id"] for s in body["steps"] if s["step"] == "ner")
+    sent.clear()
+    box = {"x": 0.1, "y": 0.2, "width": 0.3, "height": 0.05}
+    await _finish(
+        client,
+        admin_headers,
+        ner_id,
+        _ner_output({1: [_entity("person", "Maria Garcia", 0, bboxes=[box])]}),
+    )
+    payload = next(c[2] for c in sent if c[0] == "anonymize-v2")
+    assert payload["pages"][0]["content"] == mask("Maria Garcia lives here")
+    kids = await _children(client, admin_headers, body["id"])
+    entity = kids[ner_id]["output_data"]["pages"][0]["entities"][0]
+    assert (
+        entity["text"] == mask("Maria Garcia")
+        and entity["start"] == 0
+        and entity["bboxes"] == [box]
+    )
+
+
+async def test_a_public_run_stores_what_it_always_did(
+    client, admin_headers, project, sent
+):
+    text = "Maria Garcia lives in Paris"
+    body = (await run(client, admin_headers, project, text=text)).json()
+    kids = await _children(client, admin_headers, body["id"])
+    assert all(k["input_data"]["pages"][0]["content"] == text for k in kids.values())
+    ner_id = next(s["task_id"] for s in body["steps"] if s["step"] == "ner")
+    await _finish(
+        client,
+        admin_headers,
+        ner_id,
+        _ner_output({1: [_entity("person", "Maria Garcia", 0)]}),
+    )
+    kids = await _children(client, admin_headers, body["id"])
+    assert (
+        kids[ner_id]["output_data"]["pages"][0]["entities"][0]["text"] == "Maria Garcia"
+    )
+
+
+async def test_a_private_task_cannot_be_retried(client, admin_headers, project, sent):
+    body = (
+        await run(client, admin_headers, project, text="secret", anonymize=True)
+    ).json()
+    ner_id = next(s["task_id"] for s in body["steps"] if s["step"] == "ner")
+    await client.patch(
+        f"/api/v1/tasks/{ner_id}",
+        json={"status": "error", "error": "boom"},
+        headers=admin_headers,
+    )
+    sent.clear()
+    resp = await client.post(f"/api/v1/tasks/{ner_id}/retry", headers=admin_headers)
+    assert resp.status_code == 409 and "private" in resp.json()["detail"]
+    assert sent == []  # never re-sent with a masked input

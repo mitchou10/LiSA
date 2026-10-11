@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,8 @@ from app.repositories.service import ServiceRepository
 from app.repositories.task import TaskRepository
 from app.schemas.task import TaskSubmit, TaskUpdate
 from app.services.exceptions import InvalidStateError, NotFoundError
+from app.services.pipeline import CannotFeed, feed
+from app.services.privacy import mask_text_fields
 
 # Statuses from which a task can no longer transition.
 TERMINAL_STATUSES = {TaskStatus.SUCCESS, TaskStatus.ERROR, TaskStatus.REVOKED}
@@ -24,8 +27,14 @@ class TaskService:
         self.repo = TaskRepository(session)
         self.services = ServiceRepository(session)
 
-    async def dispatch(self, task: Task) -> None:
-        """Send the task to its service's worker via the broker (best-effort)."""
+    async def dispatch(
+        self, task: Task, input_data: dict[str, Any] | None = None
+    ) -> None:
+        """Send the task to its service's worker via the broker (best-effort).
+
+        ``input_data`` is what the worker gets when it differs from the stored
+        input (private runs store a masked copy).
+        """
         if task.service_id is None:
             return
         service = await self.services.get(task.service_id)
@@ -34,7 +43,7 @@ class TaskService:
         dispatch_task(
             service.name,
             str(task.id),
-            task.input_data,
+            task.input_data if input_data is None else input_data,
             queue=service.queue or service.name,
         )
 
@@ -107,23 +116,45 @@ class TaskService:
         await self.get(task_id)
         return await self.repo.list_children(task_id)
 
+    async def _is_private(self, task: Task) -> bool:
+        """Does the run of this task hide what was found (and not store it)?"""
+        if task.parent_task_id is None:
+            return False
+        parent = await self.repo.get(task.parent_task_id)
+        return bool(parent and parent.input_data.get("anonymize"))
+
     async def update(self, task_id: UUID, data: TaskUpdate) -> Task:
         task = await self.get(task_id)
-        for field, value in data.model_dump(exclude_unset=True).items():
+        changes = data.model_dump(exclude_unset=True)
+        private = await self._is_private(task)
+        # In a private run the worker's clear output is used (to feed the next
+        # workers) but never written: the table only gets the masked copy.
+        clear_output = changes.get("output_data") if private else None
+        if private:
+            for field in ("input_data", "output_data"):
+                if changes.get(field) is not None:
+                    changes[field] = mask_text_fields(changes[field])
+        for field, value in changes.items():
             setattr(task, field, value)
         await self.session.commit()
         await self.session.refresh(task)
         if task.status in TERMINAL_STATUSES:
-            await self._release_waiting(task)
+            await self._release_waiting(task, clear_output, private)
         if task.parent_task_id is not None:
             await self._rollup_parent(task.parent_task_id)
         return task
 
-    async def _release_waiting(self, task: Task) -> None:
-        """Feed the tasks that wait for ``task`` (a parser) once it is finished.
+    async def _release_waiting(
+        self,
+        task: Task,
+        clear_output: dict[str, Any] | None = None,
+        private: bool = False,
+    ) -> None:
+        """Feed the tasks that wait for ``task`` once it is finished.
 
-        Sibling tasks created with ``awaiting`` in their input get the pages the
-        task produced and are dispatched; if it failed, they fail with it.
+        Siblings created with ``awaiting`` in their input get what ``feed``
+        builds from this task and are dispatched; if it cannot be built (the
+        task failed, found nothing), they fail with it.
         """
         if task.parent_task_id is None:
             return
@@ -133,31 +164,23 @@ class TaskService:
             if t.status == TaskStatus.PENDING
             and t.input_data.get("awaiting") == str(task.id)
         ]
+        released: list[tuple[Task, dict[str, Any]]] = []
+        for waiter in waiting:
+            try:
+                payload = feed(waiter.input_data, task, clear_output)
+                # A new dict: JSON columns are not mutation-tracked. A private
+                # run stores a masked copy; the worker gets the real payload.
+                waiter.input_data = mask_text_fields(payload) if private else payload
+                released.append((waiter, payload))
+            except CannotFeed as exc:
+                waiter.status = TaskStatus.ERROR
+                waiter.error = str(exc)
         if not waiting:
             return
-        pages = (task.output_data or {}).get("pages")
-        succeeded = task.status == TaskStatus.SUCCESS and bool(pages)
-        for waiter in waiting:
-            if succeeded:
-                payload = {
-                    k: v for k, v in waiter.input_data.items() if k != "awaiting"
-                }
-                payload["pages"] = pages
-                waiter.input_data = (
-                    payload  # a new dict: JSON columns are not mutation-tracked
-                )
-            else:
-                waiter.status = TaskStatus.ERROR
-                waiter.error = (
-                    "The parser found no page."
-                    if task.status == TaskStatus.SUCCESS
-                    else f"The parser did not finish ({task.status.value}): {task.error or 'no details'}"
-                )
         await self.session.commit()
-        for waiter in waiting:
-            if succeeded:
-                await self.session.refresh(waiter)
-                await self.dispatch(waiter)
+        for waiter, payload in released:
+            await self.session.refresh(waiter)
+            await self.dispatch(waiter, payload)
 
     async def _rollup_parent(self, parent_id: UUID) -> None:
         """Recompute a parent task's status/progress from its children.
@@ -213,6 +236,11 @@ class TaskService:
 
     async def retry(self, task_id: UUID) -> Task:
         task = await self.get(task_id)
+        if await self._is_private(task):
+            raise InvalidStateError(
+                "A task of a private (anonymized) run cannot be retried: its "
+                "input was not stored. Start a new run."
+            )
         if task.status not in {TaskStatus.ERROR, TaskStatus.REVOKED}:
             raise InvalidStateError(
                 "Only failed or revoked tasks can be retried "
