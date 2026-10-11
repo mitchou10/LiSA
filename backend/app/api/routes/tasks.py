@@ -1,3 +1,4 @@
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Query, status
@@ -23,14 +24,14 @@ async def submit_task(
 async def list_tasks(
     service: TaskServiceDep,
     _user: CurrentUserDep,
-    user_id: str | None = Query(default=None),
-    status: TaskStatus | None = Query(default=None, description="Filter by status."),
-    service_id: UUID | None = Query(default=None, description="Filter by service."),
-    roots_only: bool = Query(
-        default=False, description="Only return root tasks (no parent)."
-    ),
-    limit: int = Query(20, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    user_id: Annotated[str | None, Query()] = None,
+    status: Annotated[TaskStatus | None, Query(description="Filter by status.")] = None,
+    service_id: Annotated[UUID | None, Query(description="Filter by service.")] = None,
+    roots_only: Annotated[
+        bool, Query(description="Only return root tasks (no parent).")
+    ] = False,
+    limit: Annotated[int, Query(ge=1, le=500)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Page[TaskRead]:
     items, total = await service.list_page(
         user_id=user_id,

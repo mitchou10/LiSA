@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 
@@ -28,7 +29,5 @@ async def publish_profile_changed(service_key: str, version: int) -> None:
     except Exception as exc:  # noqa: BLE001 - notification is best-effort
         logger.warning("Could not publish profile change: %s", exc)
     finally:
-        try:
+        with contextlib.suppress(Exception):
             await client.aclose()
-        except Exception:  # noqa: BLE001
-            pass

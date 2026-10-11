@@ -10,7 +10,7 @@ across PostgreSQL (prod) and SQLite (tests).
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -81,7 +81,7 @@ class AnalyticsService:
     async def dashboard(
         self, *, user_id: str | None = None, days: int = 30
     ) -> DashboardStats:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         since = now - timedelta(days=days)
         tasks = await self.tasks.list_since(since=since, user_id=user_id)
 
