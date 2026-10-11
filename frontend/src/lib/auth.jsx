@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import {
+  getAuthConfig,
   getMe,
+  oidcLogout,
   getToken,
   login as apiLogin,
   logout as apiLogout,
@@ -22,6 +24,7 @@ const MOCK_USER = {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [provider, setProvider] = useState("local");
 
   useEffect(() => {
     let active = true;
@@ -32,24 +35,32 @@ export function AuthProvider({ children }) {
       return;
     }
 
-    const token = getToken();
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-    getMe()
-      .then((me) => {
+    (async () => {
+      let mode = "local";
+      try {
+        mode = (await getAuthConfig()).provider;
+      } catch {
+        /* backend unreachable: fall back to local flow */
+      }
+      if (!active) return;
+      setProvider(mode);
+      // Local mode keeps a bearer token; Keycloak mode relies on the cookie.
+      if (mode === "local" && !getToken()) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const me = await getMe();
         if (active) setUser(me);
-      })
-      .catch(() => {
+      } catch {
         if (active) {
           apiLogout();
           setUser(null);
         }
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false);
-      });
+      }
+    })();
     return () => {
       active = false;
     };
@@ -66,9 +77,18 @@ export function AuthProvider({ children }) {
       setUser(me);
       return me;
     };
-    const signOut = () => {
+    const signOut = async () => {
       if (BYPASS_AUTH) {
         setUser(null);
+        return;
+      }
+      if (provider === "keycloak") {
+        setUser(null);
+        try {
+          window.location.href = await oidcLogout();
+        } catch {
+          window.location.href = "/login";
+        }
         return;
       }
       apiLogout();
@@ -78,11 +98,12 @@ export function AuthProvider({ children }) {
       user,
       loading,
       isAuthenticated: !!user,
+      provider,
       isAdmin: user?.role === "admin",
       signIn,
       signOut,
     };
-  }, [user, loading]);
+  }, [user, loading, provider]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

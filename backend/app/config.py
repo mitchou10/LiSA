@@ -54,6 +54,17 @@ class Settings(BaseSettings):
     keycloak_realm: str | None = None
     keycloak_client_id: str | None = None
     keycloak_admin_role: str = "admin"
+    # BFF: the backend is a confidential OIDC client; tokens stay server-side
+    # (Redis) and the browser only holds an opaque HttpOnly session cookie.
+    keycloak_client_secret: str | None = None
+    # Public URLs, used to build the fixed OAuth2 redirect_uri and post-login
+    # / post-logout redirects.
+    backend_public_url: str = "http://localhost:8000"
+    frontend_url: str = "http://localhost:8080"
+    session_cookie_name: str = "lisa_session"
+    session_cookie_secure: bool = True
+    session_cookie_samesite: str = "lax"
+    session_ttl_seconds: int = 7 * 24 * 60 * 60
 
     @property
     def broker_url(self) -> str:
@@ -62,6 +73,20 @@ class Settings(BaseSettings):
     @property
     def result_backend(self) -> str:
         return self.celery_result_backend or self.redis_url
+
+    @property
+    def keycloak_token_base(self) -> str | None:
+        """Realm base URL the backend uses to reach Keycloak (in-network)."""
+        base = self.keycloak_internal_url or self.keycloak_server_url
+        if not base or not self.keycloak_realm:
+            return None
+        return f"{base.rstrip('/')}/realms/{self.keycloak_realm}"
+
+    @property
+    def oidc_callback_url(self) -> str:
+        return (
+            f"{self.backend_public_url.rstrip('/')}{self.api_v1_prefix}/auth/callback"
+        )
 
     @property
     def keycloak_issuer(self) -> str | None:
