@@ -39,6 +39,7 @@ jobs:
       worker: ${{ steps.filter.outputs.worker }}
       anonymize: ${{ steps.filter.outputs.anonymize }}
       classification: ${{ steps.filter.outputs.classification }}
+      image_classification: ${{ steps.filter.outputs.image_classification }}
       ner: ${{ steps.filter.outputs.ner }}
       relation: ${{ steps.filter.outputs.relation }}
       safety: ${{ steps.filter.outputs.safety }}
@@ -80,6 +81,9 @@ jobs:
             classification:
               - 'services/classification/**'
               - 'worker/**'
+            image_classification:
+              - 'services/image-classification/**'
+              - 'worker/**'
             helm:
               - 'deploy/helm/**'
               - 'ci/configs/ct.yaml'
@@ -100,6 +104,7 @@ jobs:
           RELATION: ${{ steps.filter.outputs.relation }}
           PARSER: ${{ steps.filter.outputs.parser }}
           CLASSIFICATION: ${{ steps.filter.outputs.classification }}
+          IMAGE_CLASSIFICATION: ${{ steps.filter.outputs.image_classification }}
           CI: ${{ steps.filter.outputs.ci }}
         run: |
           set -euo pipefail
@@ -132,6 +137,10 @@ jobs:
 
           if [ "$RELATION" = "true" ] || [ "$WORKER" = "true" ] || [ "$CI" = "true" ]; then
             add '{"name":"relation","context":".","dockerfile":"services/relation/Dockerfile"}'
+          fi
+
+          if [ "$IMAGE_CLASSIFICATION" = "true" ] || [ "$WORKER" = "true" ] || [ "$CI" = "true" ]; then
+            add '{"name":"image-classification","context":".","dockerfile":"services/image-classification/Dockerfile"}'
           fi
 
           echo "Images to build: $IMAGES"
@@ -196,7 +205,7 @@ jobs:
     needs:
       - path-filter
       - expose-vars
-    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker == 'true' || needs.path-filter.outputs.anonymize == 'true' || needs.path-filter.outputs.classification == 'true' || needs.path-filter.outputs.safety == 'true' || needs.path-filter.outputs.ner == 'true' || needs.path-filter.outputs.relation == 'true' || needs.path-filter.outputs.ci == 'true' }}
+    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker == 'true' || needs.path-filter.outputs.anonymize == 'true' || needs.path-filter.outputs.classification == 'true' || needs.path-filter.outputs.image_classification == 'true' || needs.path-filter.outputs.safety == 'true' || needs.path-filter.outputs.ner == 'true' || needs.path-filter.outputs.relation == 'true' || needs.path-filter.outputs.ci == 'true' }}
     permissions:
       contents: read
     with:

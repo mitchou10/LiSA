@@ -126,6 +126,9 @@ jobs:
           - name: classification
             context: .
             dockerfile: services/classification/Dockerfile
+          - name: image-classification
+            context: .
+            dockerfile: services/image-classification/Dockerfile
     with:
       IMAGE_NAME: ${{ needs.expose-vars.outputs.IMAGE_BASE }}/${{ matrix.service.name }}
       IMAGE_TAG: ${{ needs.release.outputs.version }}
