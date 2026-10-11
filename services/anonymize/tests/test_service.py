@@ -201,3 +201,29 @@ def test_bbox_must_be_relative():
 
     with pytest.raises(ValidationError):
         Bbox(x=120, y=0.1, width=0.1, height=0.1, label="L")
+
+
+def test_process_replaces_image_given_by_s3_key(service, mocker, monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config.settings, "AWS_S3_BUCKET", "lisa-files")
+    s3 = mocker.Mock()
+    s3.get_object.return_value = {"Body": mocker.Mock(read=lambda: _png())}
+    service._s3 = s3
+    mocker.patch.object(service, "update_task")
+    service.process(
+        {
+            "pages": [{"content": "x", "page_number": 1, "s3_key": "pages/t/1/1.png"}],
+            "anonymized_pages": [
+                {
+                    "page_number": 1,
+                    "bboxes": [
+                        {"x": 0.1, "y": 0.1, "width": 0.1, "height": 0.1, "label": "L"}
+                    ],
+                }
+            ],
+            "blurred": True,
+        }
+    )
+    s3.get_object.assert_called_once_with(Bucket="lisa-files", Key="pages/t/1/1.png")
+    assert s3.put_object.call_args.kwargs["Key"] == "pages/t/1/1.png"

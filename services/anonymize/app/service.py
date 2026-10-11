@@ -36,8 +36,10 @@ class Page(BaseModel):
     content: str
     page_number: int | None = None
     bboxes: list[Bbox] = Field(default_factory=list)
-    # Image of the page in object storage: "s3://bucket/key" or an
-    # http(s)://host/bucket/key URL (query string ignored).
+    # Image of the page in object storage: its key in the configured bucket
+    # (what the parser returns)...
+    s3_key: str | None = None
+    # ...or a full "s3://bucket/key" / "http(s)://host/bucket/key" URL.
     page_url: str | None = None
 
 
@@ -186,7 +188,12 @@ class AnonymizeServiceV2(BaseService):
 
     def _blur_page_image(self, page: Page, bboxes: list[Bbox]) -> None:
         """Replace the page image in S3 by its blurred copy with labelled boxes."""
-        bucket, key = parse_s3_location(page.page_url, config.settings.AWS_S3_BUCKET)
+        if page.s3_key:
+            bucket, key = config.settings.AWS_S3_BUCKET, page.s3_key
+        else:
+            bucket, key = parse_s3_location(
+                page.page_url, config.settings.AWS_S3_BUCKET
+            )
         original = self.s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
         data, content_type = blur_and_annotate(original, bboxes)
         self.s3_client.put_object(
@@ -205,7 +212,7 @@ class AnonymizeServiceV2(BaseService):
                     page.content = redact(
                         page.content, anonymized.span, blurred=data.blurred
                     )
-                    if data.blurred and page.page_url:
+                    if data.blurred and (page.s3_key or page.page_url):
                         self._blur_page_image(page, anonymized.bboxes)
                 self.update_task(task_id, progress=round((index + 1) / total * 100))
         except Exception as exc:
