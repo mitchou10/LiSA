@@ -1,0 +1,17 @@
+remote: origin
+target-branch: main
+# The chart lives at deploy/helm/lisa; chart-testing treats each subdirectory
+# of a chart-dir that holds a Chart.yaml as a chart.
+chart-dirs:
+- deploy/helm
+helm-extra-args: ''
+validate-chart-schema: true
+validate-chart-values: true
+# The chart version is bumped by release-please once merged, never in the PR
+# itself, so a changed chart file must not require a bump.
+check-version-increment: false
+validate-maintainers: false
+validate-yaml: true
+exclude-deprecated: true
+excluded-charts: []
+debug: true
