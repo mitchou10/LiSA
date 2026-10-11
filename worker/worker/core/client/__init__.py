@@ -19,6 +19,7 @@ import httpx
 
 from worker.core.client.base import BaseClient, ClientError
 from worker.core.client.detection_profiles import DetectionProfileClient
+from worker.core.client.files import FileClient
 from worker.core.client.health import HealthClient
 from worker.core.client.services import ServiceClient
 from worker.core.client.tasks import TaskClient
@@ -27,6 +28,7 @@ __all__ = [
     "BaseClient",
     "ClientError",
     "DetectionProfileClient",
+    "FileClient",
     "HealthClient",
     "LisaClient",
     "ServiceClient",
@@ -52,6 +54,7 @@ class LisaClient:
         self.health = HealthClient(**kwargs)
         self.services = ServiceClient(**kwargs)
         self.tasks = TaskClient(**kwargs)
+        self.files = FileClient(**kwargs)
         self.detection_profiles = DetectionProfileClient(**kwargs)
 
     def close(self) -> None:

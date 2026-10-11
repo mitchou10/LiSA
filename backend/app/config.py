@@ -66,6 +66,15 @@ class Settings(BaseSettings):
     session_cookie_samesite: str = "lax"
     session_ttl_seconds: int = 7 * 24 * 60 * 60
 
+    # S3-compatible object storage (RustFS) for uploaded files. Only the
+    # backend talks to it; workers fetch files through the API.
+    s3_endpoint_url: str = "http://rustfs:9000"
+    s3_access_key: str = "rustfsadmin"
+    s3_secret_key: str = "rustfsadmin"
+    s3_bucket: str = "lisa-files"
+    s3_region: str = "us-east-1"
+    max_upload_mb: float = 10.0
+
     @property
     def broker_url(self) -> str:
         return self.celery_broker_url or self.redis_url

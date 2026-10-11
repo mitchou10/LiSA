@@ -69,6 +69,7 @@ class BaseClient:
         prefixed: bool = True,
         params: dict[str, Any] | None = None,
         json: Any | None = None,
+        raw: bool = False,
     ) -> Any:
         url = self._url(path, prefixed=prefixed)
         headers = (
@@ -91,4 +92,4 @@ class BaseClient:
             raise ClientError(response.status_code, detail)
         if response.status_code == 204 or not response.content:
             return None
-        return response.json()
+        return response.content if raw else response.json()
