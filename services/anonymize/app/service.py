@@ -1,209 +1,219 @@
-"""Anonymize service backed by llm-guard's ``Anonymize`` input scanner.
+"""Anonymize service v2: redact spans and boxes already detected upstream.
 
-``process`` consumes an ``InputData``-shaped payload (``pages[].content``),
-iterates over the pages, and returns an ``Analyse``-shaped result
-(``pages[].detections`` with PII entities). Progress and status are reported
-to the backend task as pages are processed.
+Unlike the llm-guard version, nothing is detected here. ``process`` receives
+pages plus the spans / boxes to anonymize (``anonymized_pages``) and returns
+the pages with the spans redacted. Progress and status are reported to the
+backend task as pages are processed.
 """
 
 from __future__ import annotations
 
+import io
 import re
-import uuid
 from typing import Any
+from urllib.parse import urlparse
 
-from llm_guard.input_scanners import Anonymize
-from llm_guard.vault import Vault
+import boto3
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from pydantic import BaseModel, Field
 from worker.core.services.base import BaseService, TaskStatus
 
 from app import config
 
-# -- JSON Schemas advertised on registration (mirror backend InputData/Analyse).
-INPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "description": "InputData",
-    "properties": {
-        "metadata": {"type": ["object", "null"]},
-        "pages": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "content": {"type": "string"},
-                    "page_number": {"type": ["integer", "null"]},
-                    "bboxes": {"type": ["array", "null"]},
-                },
-                "required": ["content"],
-            },
-        },
-    },
-}
 
-OUTPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "description": "Analyse",
-    "properties": {
-        "id": {"type": "string"},
-        "pages": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "page_number": {"type": ["integer", "null"]},
-                    "detections": {"type": "array"},
-                },
-            },
-        },
-        "error": {"type": ["string", "null"]},
-    },
-}
+class Bbox(BaseModel):
+    """Box relative to the page image: every value is between 0 and 1."""
 
-_PLACEHOLDER_RE = re.compile(r"\[REDACTED_(?P<type>[A-Z_]+?)_\d+\]")
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    width: float = Field(ge=0, le=1)
+    height: float = Field(ge=0, le=1)
+    text: str | None = None
+    label: str
 
 
-def _severity_for(score: float) -> str:
-    if score >= 0.8:
-        return "high"
-    if score >= 0.5:
-        return "medium"
-    return "low"
+class Page(BaseModel):
+    content: str
+    page_number: int | None = None
+    bboxes: list[Bbox] = Field(default_factory=list)
+    # Image of the page in object storage: "s3://bucket/key" or an
+    # http(s)://host/bucket/key URL (query string ignored).
+    page_url: str | None = None
 
 
-def _entity_type(placeholder: str) -> str:
-    match = _PLACEHOLDER_RE.search(placeholder)
-    return match.group("type") if match else "UNKNOWN"
+class Span(BaseModel):
+    start: int
+    end: int
+    text: str
+    # Shown in place of the span, in upper case: "person" -> "[PERSON]".
+    label: str
 
 
-class AnonymizeService(BaseService):
-    """Redacts PII from prompts using Presidio-backed detection."""
+class AnonymizedPage(BaseModel):
+    page_number: int
+    bboxes: list[Bbox] = Field(default_factory=list)
+    span: list[Span] = Field(default_factory=list)
 
-    name = "llm-guard-anonymize"
+
+class InputData(BaseModel):
+    pages: list[Page] = Field(default_factory=list)
+    anonymized_pages: list[AnonymizedPage] = Field(default_factory=list)
+    # True: all text becomes "*" (spans get a visible [LABEL] marker) and the page
+    # images in S3 are replaced by a blurred copy with the labelled boxes.
+    # False: only the spans get the marker and images are left untouched.
+    blurred: bool = False
+
+
+class OutputData(BaseModel):
+    pages: list[Page] = Field(default_factory=list)
+
+
+def marker(span: Span) -> str:
+    return f"[{span.label.upper()}]"
+
+
+def redact(content: str, spans: list[Span], *, blurred: bool) -> str:
+    """Mark every span in ``content``; with ``blurred``, star out the rest.
+
+    ``blurred``: all text becomes ``*`` (whitespace is kept, so lines and word
+    breaks survive) and each span is replaced by a visible marker, its label in
+    upper case (``[PERSON]``). Otherwise only the spans are replaced.
+
+    Spans are applied from the end of the text so earlier offsets stay valid;
+    a span overlapping one already applied is clipped to what is left.
+    """
+    if blurred:
+        content = re.sub(r"\S", "*", content)
+    limit = len(content)
+    for span in sorted(spans, key=lambda s: s.start, reverse=True):
+        start, end = max(0, span.start), min(span.end, limit)
+        if start >= end:
+            continue
+        content = content[:start] + marker(span) + content[end:]
+        limit = start
+    return content
+
+
+def parse_s3_location(url: str, default_bucket: str) -> tuple[str, str]:
+    """Split a page image URL into ``(bucket, key)``."""
+    parsed = urlparse(url)
+    if parsed.scheme == "s3":
+        return parsed.netloc, parsed.path.lstrip("/")
+    if parsed.scheme in ("http", "https"):
+        path = parsed.path.lstrip("/")
+        bucket, _, key = path.partition("/")
+        if default_bucket and bucket != default_bucket:
+            # Virtual-host style or unknown layout: keep the configured bucket.
+            return default_bucket, path
+        return bucket, key
+    raise ValueError(f"Unsupported page_url: {url!r}")
+
+
+def blur_and_annotate(
+    image_bytes: bytes,
+    bboxes: list[Bbox],
+) -> tuple[bytes, str]:
+    """Blur the whole image, then draw each bbox with its label on top.
+
+    Boxes are relative (0-1) and are converted to the image's pixels here.
+
+    Returns the encoded image and its MIME type. The original format is kept
+    (PNG when it cannot be determined).
+    """
+    with Image.open(io.BytesIO(image_bytes)) as source:
+        fmt = source.format or "PNG"
+        image = source.convert("RGB")
+    radius = max(
+        config.settings.BLUR_MIN_RADIUS, min(image.size) * config.settings.BLUR_RATIO
+    )
+    image = image.filter(ImageFilter.GaussianBlur(radius))
+
+    draw = ImageDraw.Draw(image)
+    font = ImageFont.load_default(size=max(12, round(min(image.size) * 0.02)))
+    img_w, img_h = image.size
+    for box in bboxes:
+        left, top = box.x * img_w, box.y * img_h
+        right, bottom = left + box.width * img_w, top + box.height * img_h
+        draw.rectangle((left, top, right, bottom), outline=(220, 38, 38), width=3)
+        label_box = draw.textbbox((left, top), box.label, font=font)
+        pad = 2
+        # Label sits just above the box, or inside it when at the very top.
+        shift = (label_box[3] - label_box[1]) + 2 * pad
+        dy = -shift if top - shift >= 0 else 0
+        draw.rectangle(
+            (
+                label_box[0] - pad,
+                label_box[1] + dy - pad,
+                label_box[2] + pad,
+                label_box[3] + dy + pad,
+            ),
+            fill=(220, 38, 38),
+        )
+        draw.text((left, top + dy), box.label, fill=(255, 255, 255), font=font)
+
+    out = io.BytesIO()
+    image.save(out, format=fmt)
+    return out.getvalue(), Image.MIME.get(fmt, "image/png")
+
+
+class AnonymizeServiceV2(BaseService):
+    name = "anonymize-v2"
     version = "0.1.0"
-    description = "Redacts PII (names, emails, cards, IBAN, SSN, ...) from prompts using llm-guard's Anonymize scanner."
-    tags = ["llm-guard", "pii", "anonymize", "input"]
+    description = "Redacts spans and boxes already detected by an analyser."
+    # Must match the queue the Celery worker consumes (see app.celery_app).
+    queue = config.settings.CELERY_QUEUE
+    tags = ["anonymize", "v2"]
     type = "guard"
-    queue = config.CELERY_QUEUE
-    input_schema = INPUT_SCHEMA
-    output_schema = OUTPUT_SCHEMA
+    input_schema = InputData.model_json_schema()
+    output_schema = OutputData.model_json_schema()
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self._scanner = None
-        self._vault = None
+        self._s3: Any = None
 
-    def _get_scanner(self):
-        """Build a fresh Anonymize scanner with a new Vault.
-
-        The scanner is recreated on every call so the Vault starts empty.
-        If we reuse a cached scanner, the Vault accumulates entries across
-        tasks and subsequent scans return no new entities (because the PII
-        is already stored), producing ``entities: null``.
-        """
-        self._vault = Vault()
-        self._scanner = Anonymize(
-            self._vault,
-            threshold=config.ANONYMIZE_THRESHOLD,
-            language=config.ANONYMIZE_LANGUAGE,
-        )
-        return self._scanner
-
-    # -- page-level scanning ----------------------------------------------
-    def _scan_page(self, content: str) -> dict[str, Any]:
-        """Scan one page's content and return a PIIDetectionResult dict."""
-        scanner = self._get_scanner()
-        before = len(self._vault.get())
-        sanitized, is_valid, risk_score = scanner.scan(content)
-        new_entries = self._vault.get()[before:]
-
-        flagged = not bool(is_valid)
-        # llm-guard returns a risk score in [-1, 1] (negative when valid); clamp
-        # it to a [0, 1] confidence so the UI never shows a negative score.
-        score = max(0.0, min(1.0, float(risk_score)))
-
-        entities = []
-        for idx, (placeholder, original) in enumerate(new_entries):
-            start = content.find(original)
-            entities.append(
-                {
-                    "id": f"e{idx}",
-                    "type": _entity_type(placeholder),
-                    "text": original,
-                    "start_char": start,
-                    "end_char": start + len(original) if start >= 0 else -1,
-                    "flagged": True,
-                    "confidence": score,
-                }
+    @property
+    def s3_client(self) -> Any:
+        """Built on first use, so the service starts without S3 configured."""
+        if self._s3 is None:
+            self._s3 = boto3.client(
+                "s3",
+                aws_access_key_id=config.settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=config.settings.AWS_SECRET_ACCESS_KEY,
+                region_name=config.settings.AWS_S3_REGION or None,
+                endpoint_url=config.settings.AWS_S3_ENDPOINT_URL or None,
             )
+        return self._s3
 
-        return {
-            "flagged": flagged,
-            "confidence": score,
-            "severity": _severity_for(score) if flagged else None,
-            "action": "redact" if flagged else "allow",
-            "service_id": self.id,
-            "pii": flagged,
-            "entities": entities,
-            "details": {"sanitized": sanitized, "risk_score": score},
-        }
-
-    def _iter_pages(self, input_data: Any) -> list[dict[str, Any]]:
-        """Normalize a flexible payload into a list of page dicts."""
-        if isinstance(input_data, str):
-            return [{"content": input_data, "page_number": None}]
-        if isinstance(input_data, dict):
-            pages = input_data.get("pages")
-            if pages:
-                return pages
-            if input_data.get("prompt") or input_data.get("content"):
-                return [
-                    {
-                        "content": str(
-                            input_data.get("prompt") or input_data.get("content")
-                        ),
-                        "page_number": None,
-                    }
-                ]
-        return [{"content": str(input_data), "page_number": None}]
+    def _blur_page_image(self, page: Page, bboxes: list[Bbox]) -> None:
+        """Replace the page image in S3 by its blurred copy with labelled boxes."""
+        bucket, key = parse_s3_location(page.page_url, config.settings.AWS_S3_BUCKET)
+        original = self.s3_client.get_object(Bucket=bucket, Key=key)["Body"].read()
+        data, content_type = blur_and_annotate(original, bboxes)
+        self.s3_client.put_object(
+            Bucket=bucket, Key=key, Body=data, ContentType=content_type
+        )
 
     def process(self, input_data: Any, task_id: str | None = None) -> dict[str, Any]:
-        """Iterate over pages, scan each, and report progress/status."""
-        pages = self._iter_pages(input_data)
-        total = len(pages) or 1
-
         self.update_task(task_id, status=TaskStatus.RUNNING, progress=0)
-
-        results: list[dict[str, Any]] = []
         try:
-            for index, page in enumerate(pages):
-                content = (
-                    str(page.get("content", ""))
-                    if isinstance(page, dict)
-                    else str(page)
-                )
-                detection = self._scan_page(content)
-                results.append(
-                    {
-                        "page_number": (
-                            page.get("page_number") if isinstance(page, dict) else None
-                        ),
-                        "detections": [detection],
-                    }
-                )
-                progress = round((index + 1) / total * 100)
-                self.update_task(task_id, progress=progress)
+            data = InputData.model_validate(input_data or {})
+            pages = {page.page_number: page for page in data.pages}
+            total = len(data.anonymized_pages) or 1
+            for index, anonymized in enumerate(data.anonymized_pages):
+                page = pages.get(anonymized.page_number)
+                if page is not None:
+                    page.content = redact(
+                        page.content, anonymized.span, blurred=data.blurred
+                    )
+                    if data.blurred and page.page_url:
+                        self._blur_page_image(page, anonymized.bboxes)
+                self.update_task(task_id, progress=round((index + 1) / total * 100))
         except Exception as exc:
             self.update_task(task_id, status=TaskStatus.ERROR, error=str(exc))
             raise
 
-        analyse = {
-            "id": task_id or f"anonymize-{uuid.uuid4()}",
-            "pages": results,
-            "error": None,
-        }
+        result = OutputData(pages=data.pages).model_dump()
         self.update_task(
-            task_id,
-            status=TaskStatus.SUCCESS,
-            progress=100,
-            output_data=analyse,
+            task_id, status=TaskStatus.SUCCESS, progress=100, output_data=result
         )
-        return analyse
+        return result
