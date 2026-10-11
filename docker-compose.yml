@@ -55,6 +55,17 @@ services:
         condition: service_healthy
       rustfs:
         condition: service_healthy
+    # Workers register themselves on start: they wait for this to be healthy.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
     networks:
       - lisa
 
@@ -179,7 +190,7 @@ services:
       redis:
         condition: service_healthy
       server:
-        condition: service_started
+        condition: service_healthy
     networks:
       - lisa
 
@@ -199,7 +210,7 @@ services:
       redis:
         condition: service_healthy
       server:
-        condition: service_started
+        condition: service_healthy
     networks:
       - lisa
 
@@ -220,7 +231,7 @@ services:
       redis:
         condition: service_healthy
       server:
-        condition: service_started
+        condition: service_healthy
     networks:
       - lisa
 
@@ -241,7 +252,7 @@ services:
       redis:
         condition: service_healthy
       server:
-        condition: service_started
+        condition: service_healthy
     networks:
       - lisa
 
@@ -262,7 +273,7 @@ services:
       redis:
         condition: service_healthy
       server:
-        condition: service_started
+        condition: service_healthy
     networks:
       - lisa
 
@@ -288,7 +299,7 @@ services:
       redis:
         condition: service_healthy
       server:
-        condition: service_started
+        condition: service_healthy
     networks:
       - lisa
 

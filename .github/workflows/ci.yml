@@ -196,7 +196,7 @@ jobs:
     needs:
       - path-filter
       - expose-vars
-    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.anonymize == 'true' || needs.path-filter.outputs.classification == 'true' || needs.path-filter.outputs.safety == 'true' || needs.path-filter.outputs.ner == 'true' || needs.path-filter.outputs.relation == 'true' || needs.path-filter.outputs.ci == 'true' }}
+    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.worker == 'true' || needs.path-filter.outputs.anonymize == 'true' || needs.path-filter.outputs.classification == 'true' || needs.path-filter.outputs.safety == 'true' || needs.path-filter.outputs.ner == 'true' || needs.path-filter.outputs.relation == 'true' || needs.path-filter.outputs.ci == 'true' }}
     permissions:
       contents: read
     with:
