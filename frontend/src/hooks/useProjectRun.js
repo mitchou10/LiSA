@@ -53,9 +53,16 @@ export function useProjectRun() {
             waiting: task.input_data?.awaiting !== undefined,
             output: task.output_data,
             error: task.error,
+            // Compute time, once the worker has finished (queue wait excluded).
+            duration: task.duration_seconds,
           };
         });
-        setRun({ id: started.id, status: parent.status, steps });
+        setRun({
+          id: started.id,
+          status: parent.status,
+          duration: parent.duration_seconds,
+          steps,
+        });
         if (TERMINAL.includes(parent.status)) break;
       }
     } catch (err) {
