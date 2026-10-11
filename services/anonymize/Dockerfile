@@ -8,6 +8,9 @@ ENV PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     UV_PROJECT_ENVIRONMENT=/usr/local
 
+# Current packaging tools (the base image ships ones with known CVEs).
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
@@ -21,5 +24,13 @@ COPY services/anonymize/pyproject.toml ./
 COPY services/anonymize/README.md ./
 COPY services/anonymize/app ./app
 RUN uv pip install --system --no-cache --no-sources .
+
+# Run as an unprivileged user.
+RUN useradd --system --uid 10001 --home-dir /app app \
+    && mkdir -p /opt/hf && chown -R app:app /app /opt/hf
+USER app
+
+HEALTHCHECK --interval=60s --timeout=20s --start-period=120s --retries=3 \
+    CMD celery -A app.celery_app.celery_app inspect ping -d celery@$HOSTNAME || exit 1
 
 CMD ["celery", "-A", "app.celery_app.celery_app", "worker", "--loglevel=info", "--concurrency=1"]
