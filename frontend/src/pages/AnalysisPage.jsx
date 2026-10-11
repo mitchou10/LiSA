@@ -105,6 +105,8 @@ export default function AnalysisPage() {
   const [text, setText] = useState("");
   const [files, setFiles] = useState([]);
   const [blur, setBlur] = useState(true);
+  // Files: also classify the page images (CLIP) with the same classifications.
+  const [classifyImages, setClassifyImages] = useState(true);
   // Hide what was found and keep nothing readable in the database.
   const [anonymize, setAnonymize] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -177,6 +179,7 @@ export default function AnalysisPage() {
         for (const file of files) uploaded.push(await uploadFile(file));
         body.file_ids = uploaded.map((f) => f.id);
         body.blur_screenshots = blur;
+        body.classify_images = classifyImages;
         setUploading(false);
       }
       await start(projectId, body);
@@ -300,6 +303,15 @@ export default function AnalysisPage() {
                 />
                 {t("run.blur")}
               </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={classifyImages}
+                  onChange={(e) => setClassifyImages(e.target.checked)}
+                />
+                {t("run.classifyImages")}
+              </label>
+              <p className="text-xs text-muted-foreground">{t("run.classifyImages.hint")}</p>
               <p className="text-xs text-muted-foreground">{t("run.file.hint")}</p>
             </TabsContent>
           </Tabs>

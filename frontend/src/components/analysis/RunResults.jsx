@@ -148,6 +148,34 @@ function SafetyResult({ output, t }) {
   );
 }
 
+function ImageClassificationResult({ output, t }) {
+  const images = output?.images ?? [];
+  return images.map((image, i) => (
+    <div key={i}>
+      <div className="mb-1.5 text-xs font-medium text-muted-foreground">
+        {image.page_number != null ? `${t("run.page")} ${image.page_number}` : image.s3_key}
+      </div>
+      <ul className="space-y-1 text-sm">
+        {image.classifications.map((c) => (
+          <li key={c.name} className="flex flex-wrap items-center gap-1.5">
+            <span className="font-medium">{c.name}</span>
+            {c.labels.length ? (
+              c.labels.map((l) => (
+                <Badge key={l}>
+                  {l}
+                  <span className="ml-1.5 tabular-nums opacity-70">{pct(c.scores?.[l])}</span>
+                </Badge>
+              ))
+            ) : (
+              <span className="text-xs text-muted-foreground">{t("run.noLabel")}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  ));
+}
+
 function AnonymizeResult({ output, t }) {
   const pages = output?.pages ?? [];
   return (
@@ -158,6 +186,7 @@ function AnonymizeResult({ output, t }) {
 }
 
 const RESULT = {
+  image_classification: ImageClassificationResult,
   anonymize: AnonymizeResult,
   parser: ParserResult,
   ner: NerResult,

@@ -36,6 +36,13 @@ export function buildPages(run, source) {
   const anonymized = new Map(
     (done(run.steps, "anonymize")?.output?.pages ?? []).map((p) => [p.page_number, p.content])
   );
+  // What the image model made of each page screenshot.
+  const looks = new Map(
+    (done(run.steps, "image_classification")?.output?.images ?? []).map((im) => [
+      im.page_number,
+      im.classifications,
+    ])
+  );
   const unsafe = new Map(
     (done(run.steps, "safety")?.output?.pages ?? []).map((p) => [p.page_number, p.unsafe])
   );
@@ -57,6 +64,7 @@ export function buildPages(run, source) {
     unsafe: unsafe.get(page.number) ?? false,
     classifications: classes.get(page.number) ?? [],
     anonymized: anonymized.get(page.number) ?? null,
+    imageClassifications: looks.get(page.number) ?? [],
   }));
 }
 
