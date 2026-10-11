@@ -12,15 +12,15 @@ import logging
 from celery import Celery
 from celery.signals import worker_ready
 
-from app import config
+from app.config import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("lisa.service.safety")
 
 celery_app = Celery(
     "safety",
-    broker=config.CELERY_BROKER_URL,
-    backend=config.CELERY_RESULT_BACKEND,
+    broker=settings.CELERY_BROKER_URL,
+    backend=settings.CELERY_RESULT_BACKEND,
     include=["app.tasks"],
 )
 
@@ -30,7 +30,7 @@ celery_app.conf.update(
     accept_content=["json"],
     task_track_started=True,
     worker_prefetch_multiplier=1,
-    task_default_queue=config.CELERY_QUEUE,
+    task_default_queue=settings.CELERY_QUEUE,
 )
 
 

@@ -198,8 +198,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       LISA_API_URL: http://server:8000
       LISA_SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-service-token}
-      CELERY_QUEUE: ${SAFETY_QUEUE:-llm-guard-safety}
-      ENABLED_SCANNERS: ${ENABLED_SCANNERS:-prompt_injection,toxicity,secrets}
+      CELERY_QUEUE: ${SAFETY_QUEUE:-safety}
+      SAFETY_MODEL: ${SAFETY_MODEL:-fastino/GLiNER2-Guardrails-PII-Multi}
     depends_on:
       redis:
         condition: service_healthy
