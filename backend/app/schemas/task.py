@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.models.enums import TaskStatus
 
@@ -42,6 +42,16 @@ class TaskRead(BaseModel):
     error: str | None
     created_at: datetime
     updated_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def duration_seconds(self) -> float | None:
+        """Compute time, once the task has started and ended."""
+        if self.started_at is None or self.finished_at is None:
+            return None
+        return max(0.0, (self.finished_at - self.started_at).total_seconds())
 
 
 class TaskStatusRead(BaseModel):

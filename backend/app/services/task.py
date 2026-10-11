@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -17,6 +18,18 @@ from app.services.privacy import mask_text_fields
 
 # Statuses from which a task can no longer transition.
 TERMINAL_STATUSES = {TaskStatus.SUCCESS, TaskStatus.ERROR, TaskStatus.REVOKED}
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _stamp(task: Task, now: datetime) -> None:
+    """Record when the task started (first running) and when it ended."""
+    if task.status == TaskStatus.RUNNING and task.started_at is None:
+        task.started_at = now
+    if task.status in TERMINAL_STATUSES and task.finished_at is None:
+        task.finished_at = now
 
 
 class TaskService:
@@ -136,6 +149,7 @@ class TaskService:
                     changes[field] = mask_text_fields(changes[field])
         for field, value in changes.items():
             setattr(task, field, value)
+        _stamp(task, _now())
         await self.session.commit()
         await self.session.refresh(task)
         if task.status in TERMINAL_STATUSES:
@@ -217,9 +231,24 @@ class TaskService:
         else:
             status = TaskStatus.PENDING
 
-        if parent.status != status or parent.progress != progress:
+        # The run's time: from the first worker's start to the last one's end.
+        started = min((c.started_at for c in children if c.started_at), default=None)
+        finished = (
+            max((c.finished_at for c in children if c.finished_at), default=None)
+            if all_terminal
+            else None
+        )
+
+        if (
+            parent.status != status
+            or parent.progress != progress
+            or parent.started_at != started
+            or parent.finished_at != finished
+        ):
             parent.status = status
             parent.progress = progress
+            parent.started_at = started
+            parent.finished_at = finished
             await self.session.commit()
             await self.session.refresh(parent)
 
@@ -230,6 +259,7 @@ class TaskService:
                 f"Cannot revoke a task in state '{task.status.value}'."
             )
         task.status = TaskStatus.REVOKED
+        _stamp(task, _now())
         await self.session.commit()
         await self.session.refresh(task)
         return task
@@ -250,6 +280,7 @@ class TaskService:
         task.progress = 0
         task.error = None
         task.output_data = None
+        task.started_at = task.finished_at = None
         await self.session.commit()
         await self.session.refresh(task)
         await self.dispatch(task)

@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import JSON, ForeignKey, Integer, String, Text, Uuid
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, Uuid
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -49,6 +50,15 @@ class Task(Base, TimestampMixin):
         index=True,
     )
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # When the worker began, and when the task ended: the difference is the
+    # compute time (the wait in the queue is not in it). For a run (parent
+    # task): from the first worker's start to the last one's end.
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     input_data: Mapped[dict] = mapped_column(JSONType, nullable=False, default=dict)
     output_data: Mapped[dict | None] = mapped_column(JSONType, nullable=True)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
