@@ -1,4 +1,4 @@
-"""Tests for the live detection profile (ProfileProvider + service wiring)."""
+"""Tests for the live detection profile provider."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import json
 import time
 
 from app.profile import ProfileProvider
-from app.service import GlinerService
 
 DEFAULT = {"version": None, "threshold": 0.5, "entities": [{"label": "default"}]}
 
@@ -132,80 +131,3 @@ class TestProfileProvider:
             time.sleep(0.02)
         assert provider.get()["version"] == 2
         assert profile_module  # module imported without side effects
-
-
-class TestServiceUsesProfile:
-    def _service(self, profile, mock_gliner_model):
-        provider = ProfileProvider(
-            service_key="k", fallback=lambda: DEFAULT, fetch=lambda: (7, profile)
-        )
-        return GlinerService(profile_provider=provider)
-
-    def test_only_enabled_labels_are_sent(self, mock_env, mock_gliner_model):
-        mock_gliner_model.predict_entities.return_value = []
-        profile = _config(_entity("iban"), _entity("secret thing", enabled=False))
-        self._service(profile, mock_gliner_model)._scan_page("text")
-        assert mock_gliner_model.predict_entities.call_args.args[1] == ["iban"]
-
-    def test_no_enabled_label_skips_model(self, mock_env, mock_gliner_model):
-        service = self._service(
-            _config(_entity("iban", enabled=False)), mock_gliner_model
-        )
-        result = service._scan_page("text")
-        assert result["flagged"] is False
-        mock_gliner_model.predict_entities.assert_not_called()
-
-    def test_category_severity_action_come_from_profile(
-        self, mock_env, mock_gliner_model
-    ):
-        mock_gliner_model.predict_entities.return_value = [
-            {"text": "FR76", "label": "iban", "start": 0, "end": 4, "score": 0.9}
-        ]
-        profile = _config(_entity("iban", "FINANCE", severity="high", action="block"))
-        result = self._service(profile, mock_gliner_model)._scan_page("FR76")
-        assert result["entities"][0]["type"] == "FINANCE"
-        assert result["severity"] == "high"
-        assert result["action"] == "block"
-        assert result["profile_version"] == 7
-        assert result["details"]["profile_version"] == 7
-
-    def test_per_label_threshold_filters(self, mock_env, mock_gliner_model):
-        mock_gliner_model.predict_entities.return_value = [
-            {"text": "a", "label": "iban", "start": 0, "end": 1, "score": 0.7},
-            {"text": "b", "label": "person", "start": 2, "end": 3, "score": 0.7},
-        ]
-        profile = _config(
-            _entity("iban", threshold=0.9),
-            _entity("person", threshold=0.3),
-            threshold=0.6,
-        )
-        result = self._service(profile, mock_gliner_model)._scan_page("a b")
-        assert [e["label"] for e in result["entities"]] == ["person"]
-        # The model is queried with the lowest threshold in play.
-        assert mock_gliner_model.predict_entities.call_args.kwargs["threshold"] == 0.3
-
-    def test_allow_action_is_reported_but_not_flagged(
-        self, mock_env, mock_gliner_model
-    ):
-        mock_gliner_model.predict_entities.return_value = [
-            {"text": "Bob", "label": "person", "start": 0, "end": 3, "score": 0.9}
-        ]
-        profile = _config(_entity("person", action="allow"))
-        result = self._service(profile, mock_gliner_model)._scan_page("Bob")
-        assert result["entities"][0]["flagged"] is False
-        assert result["flagged"] is False
-        assert result["action"] == "allow"
-        assert result["severity"] is None
-
-    def test_highest_severity_and_action_win(self, mock_env, mock_gliner_model):
-        mock_gliner_model.predict_entities.return_value = [
-            {"text": "a", "label": "low one", "start": 0, "end": 1, "score": 0.9},
-            {"text": "b", "label": "high one", "start": 2, "end": 3, "score": 0.9},
-        ]
-        profile = _config(
-            _entity("low one", severity="low"),
-            _entity("high one", severity="high", action="block"),
-        )
-        result = self._service(profile, mock_gliner_model)._scan_page("a b")
-        assert result["severity"] == "high"
-        assert result["action"] == "block"

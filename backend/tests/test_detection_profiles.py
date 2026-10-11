@@ -105,6 +105,25 @@ async def test_create_version_becomes_active(client, published):
     assert [v["is_active"] for v in versions["items"]] == [True, False]
 
 
+async def test_entity_description_is_kept(client, published):
+    headers = await _headers(client)
+    cfg = _config(
+        entities=[
+            {
+                "label": "iban",
+                "category": "pii",
+                "description": "A bank account number (IBAN)",
+            },
+            {"label": "person", "category": "pii"},
+        ]
+    )
+    resp = await client.post(URL + "/versions", json={"config": cfg}, headers=headers)
+    assert resp.status_code == 201, resp.text
+    entities = resp.json()["config"]["entities"]
+    assert entities[0]["description"] == "A bank account number (IBAN)"
+    assert entities[1]["description"] is None  # optional
+
+
 async def test_versions_are_immutable_snapshots(client):
     headers = await _headers(client)
     await client.post(URL + "/versions", json={"config": _config()}, headers=headers)
