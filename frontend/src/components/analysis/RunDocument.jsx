@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { usePageImage } from "../../hooks/usePageImage";
-import { buildPages, colorFor, segments } from "../../lib/runModel";
+import { buildPages, colorFor, isAnonymizing, segments } from "../../lib/runModel";
 import { cn } from "../../lib/utils";
 import { useI18n } from "../../lib/i18n.jsx";
 
@@ -107,6 +107,33 @@ function PageImage({ page, items, activeId, onActive }) {
   );
 }
 
+/** The text the anonymize worker returned: stars, with a coloured [LABEL] per entity. */
+function AnonymizedText({ content, t }) {
+  const parts = content.split(/(\[[^\]\n]+\])/);
+  return (
+    <div className="space-y-1">
+      <p className="whitespace-pre-wrap rounded-lg border border-border bg-background/40 p-3 text-sm leading-relaxed">
+        {parts.map((part, i) =>
+          /^\[[^\]\n]+\]$/.test(part) ? (
+            <mark
+              key={i}
+              className="rounded-[3px] px-1 font-medium text-foreground"
+              style={{
+                backgroundColor: `color-mix(in srgb, ${colorFor(part)} 30%, transparent)`,
+              }}
+            >
+              {part}
+            </mark>
+          ) : (
+            part
+          )
+        )}
+      </p>
+      <p className="text-xs text-muted-foreground">{t("run.doc.anonymized")}</p>
+    </div>
+  );
+}
+
 /** The page text with the spans marked: entities highlighted, relation ends underlined. */
 function PageText({ page, items, activeId, onActive, masked }) {
   const { t } = useI18n();
@@ -175,6 +202,9 @@ function Side({ page, activeId, onActive, layers, masked, t }) {
                   {show(e.text, masked)}
                 </span>
                 <span className="shrink-0 text-xs text-muted-foreground">{e.label}</span>
+                <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                  {pct(e.score)}
+                </span>
                 <Badge variant={e.action === "block" ? "destructive" : "muted"}>
                   {t(`sensitive.action.${e.action}`)}
                 </Badge>
@@ -209,7 +239,12 @@ function Side({ page, activeId, onActive, layers, masked, t }) {
                 <span className="font-medium" style={{ color: TAIL_COLOR }}>
                   {show(r.tail.text, masked)}
                 </span>
-                <span className="text-xs text-muted-foreground">{pct(r.score)}</span>
+                <span
+                  className="text-xs tabular-nums text-muted-foreground"
+                  title={`${t("run.doc.head")} ${pct(r.head.score)} · ${t("run.doc.tail")} ${pct(r.tail.score)}`}
+                >
+                  {pct(r.score)}
+                </span>
               </li>
             ))}
           </ul>
@@ -230,8 +265,11 @@ export default function RunDocument({ run, source }) {
   const pages = useMemo(() => buildPages(run, source), [run, source]);
   const [index, setIndex] = useState(0);
   const [layers, setLayers] = useState({ entities: true, relations: true });
-  // The text is hidden by default: what was found shows as coloured stars.
-  const [masked, setMasked] = useState(true);
+  // A run that asks to anonymize hides the text for good; otherwise it is
+  // clear, and the checkbox hides it on screen.
+  const anonymizing = isAnonymizing(run);
+  const [maskedByUser, setMasked] = useState(false);
+  const masked = anonymizing || maskedByUser;
   const [activeId, setActiveId] = useState(null);
 
   // A new run starts on its first page.
@@ -292,6 +330,7 @@ export default function RunDocument({ run, source }) {
             <input
               type="checkbox"
               checked={masked}
+              disabled={anonymizing}
               onChange={(e) => setMasked(e.target.checked)}
             />
             {t("run.doc.mask")}
@@ -308,17 +347,31 @@ export default function RunDocument({ run, source }) {
             </Badge>
           )}
           {page.safety
-            .flatMap((check) => check.labels.filter((l) => l.flagged))
+            .flatMap((check) => check.labels.map((l) => ({ ...l, check: check.name })))
+            .sort((a, b) => Number(b.flagged) - Number(a.flagged))
             .map((l) => (
-              <Badge key={l.label} variant="destructive">
-                {l.label} {pct(l.score)}
+              <Badge
+                key={`${l.check}-${l.label}`}
+                variant={l.flagged ? "destructive" : "muted"}
+                title={l.check}
+              >
+                {l.label} <span className="ml-1 tabular-nums opacity-70">{pct(l.score)}</span>
               </Badge>
             ))}
-          {page.classifications.map((c) => (
-            <Badge key={c.name} variant="muted">
-              {c.name}: {c.labels.length ? c.labels.join(", ") : t("run.noLabel")}
-            </Badge>
-          ))}
+          {page.classifications.flatMap((c) =>
+            c.labels.length ? (
+              c.labels.map((label) => (
+                <Badge key={`${c.name}-${label}`} variant="muted" title={c.name}>
+                  {c.name}: {label}
+                  <span className="ml-1 tabular-nums opacity-70">{pct(c.scores?.[label])}</span>
+                </Badge>
+              ))
+            ) : (
+              <Badge key={c.name} variant="muted">
+                {c.name}: {t("run.noLabel")}
+              </Badge>
+            )
+          )}
         </div>
 
         <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -326,13 +379,17 @@ export default function RunDocument({ run, source }) {
             {page.image && (
               <PageImage page={page} items={items} activeId={activeId} onActive={setActiveId} />
             )}
-            <PageText
+            {page.anonymized !== null ? (
+              <AnonymizedText content={page.anonymized} t={t} />
+            ) : (
+              <PageText
               page={page}
               items={items}
               activeId={activeId}
               onActive={setActiveId}
               masked={masked}
-            />
+              />
+            )}
           </div>
           <Side
             page={page}

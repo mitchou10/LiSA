@@ -105,6 +105,8 @@ export default function AnalysisPage() {
   const [text, setText] = useState("");
   const [files, setFiles] = useState([]);
   const [blur, setBlur] = useState(true);
+  // Hide what was found and keep nothing readable in the database.
+  const [anonymize, setAnonymize] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [formError, setFormError] = useState(null);
   // What was sent: a text is cut into pages here, files come back from the parser.
@@ -164,6 +166,7 @@ export default function AnalysisPage() {
       const body = Object.fromEntries(
         DEFINITION_KINDS.map((k) => [BODY_FIELD[k], [...selected[k]]])
       );
+      body.anonymize = anonymize;
       if (source === "text") {
         body.text = text;
         setSent({ kind: "text", pages: textToPages(text) });
