@@ -83,6 +83,8 @@ class TaskResult(BaseModel):
     multi_label: bool
     # Always a list: one element in single-label mode, empty if nothing applies.
     labels: list[str] = Field(default_factory=list)
+    # Probability of each returned label (when the model gives one).
+    scores: dict[str, float] = Field(default_factory=dict)
 
 
 class PageResult(BaseModel):

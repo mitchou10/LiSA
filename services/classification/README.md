@@ -33,12 +33,13 @@ classifications, each one **single-label** (exactly one label per page) or
   ```json
   {"id": "...", "model": "gliner2:fastino/gliner2.5-multi-v1",
    "pages": [{"page_number": 1, "classifications": [
-     {"name": "doc_type", "multi_label": false, "labels": ["invoice"]},
-     {"name": "topics", "multi_label": true, "labels": ["finance"]}]}]}
+     {"name": "doc_type", "multi_label": false, "labels": ["invoice"], "scores": {"invoice": 0.93}},
+     {"name": "topics", "multi_label": true, "labels": ["finance"], "scores": {"finance": 0.88}}]}]}
   ```
 
   `labels` is always a list: one element in single-label mode, empty when
-  nothing applies (or the page is blank). Only labels from the request are
+  nothing applies (or the page is blank). `scores` gives the probability of each
+  returned label (omitted when the model gives none). Only labels from the request are
   ever returned.
 - **Long pages** are read in full, not truncated: the GLiNER2 backend uses
   [`classify_text_long`](https://github.com/fastino-ai/GLiNER2/blob/main/tutorial/12-long_context.md),
