@@ -7,6 +7,9 @@ requires-python = ">=3.11,<3.14"
 dependencies = [
     "celery[redis]>=5.4",
     "liteparse>=2.14",
+    "boto3>=1.35",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
     "pillow>=10.0",
     "lisa-worker",
 ]

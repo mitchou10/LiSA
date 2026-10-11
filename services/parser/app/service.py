@@ -1,89 +1,33 @@
-"""Parser service: text, OCR and word boxes from PDFs and images.
+"""Parser service: text, OCR, boxes and screenshots from PDFs and images.
 
 Built on LiteParse (native text extraction, Tesseract OCR only where a page has
-no text layer). For every page it returns:
-
-* ``content``: the page text, one line per text line,
-* ``lines`` / ``words``: boxes in page coordinates (``width`` x ``height``),
-  each carrying ``start``/``end`` character offsets into ``content`` so that an
-  entity found by an analyser (``start_char``/``end_char``) can be mapped back
-  onto the page,
-* ``image``: a PNG data URL of the rendered page.
+no text layer). The service reads each file from the bucket by its ``s3_key``,
+deletes it right away, and returns for every page the text and the relative
+boxes in clear (see ``app.schemas.Page``) plus the ``s3_key`` of a screenshot
+that is blurred by default. Detection and anonymization happen elsewhere.
 """
 
 from __future__ import annotations
 
-import base64
-import binascii
-import io
 import logging
 import os
-import re
 import tempfile
 import uuid
 from typing import Any
 
 from liteparse import LiteParse
-from PIL import Image, ImageFilter
-from worker.core.client import ClientError, FileClient
+from pydantic import ValidationError
 from worker.core.services.base import BaseService, TaskStatus
 
-from app import config
+from app.config import settings
+from app.errors import ParserError, StorageError
+from app.imaging import blur_png
+from app.layout import build_page
+from app.schemas import InputFile, ParserInput, ParserOutput
+from app.storage import Storage
 
 logger = logging.getLogger("lisa.service.parser")
 
-INPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "description": "ParserInput",
-    "properties": {
-        "files": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "file_id": {
-                        "type": "string",
-                        "description": "Id of a file uploaded with POST /files.",
-                    },
-                    "filename": {"type": "string"},
-                    "mime": {"type": ["string", "null"]},
-                    "data_base64": {
-                        "type": "string",
-                        "description": "Inline content, used when no file_id is given.",
-                    },
-                },
-            },
-        },
-        "blur_screenshots": {"type": "boolean", "default": False},
-    },
-}
-
-OUTPUT_SCHEMA: dict[str, Any] = {
-    "type": "object",
-    "description": "ParsedDocuments",
-    "properties": {
-        "id": {"type": "string"},
-        "pages": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "page_number": {"type": "integer"},
-                    "filename": {"type": "string"},
-                    "width": {"type": "number"},
-                    "height": {"type": "number"},
-                    "content": {"type": "string"},
-                    "lines": {"type": "array"},
-                    "words": {"type": "array"},
-                    "image": {"type": ["string", "null"]},
-                },
-            },
-        },
-        "error": {"type": ["string", "null"]},
-    },
-}
-
-_TOKEN_RE = re.compile(r"\S+")
 _EXT_BY_MIME = {
     "application/pdf": ".pdf",
     "image/png": ".png",
@@ -94,184 +38,66 @@ _EXT_BY_MIME = {
 }
 
 
-def blur_png(image_bytes: bytes) -> bytes:
-    """Irreversibly blur a page image so its text can no longer be read.
-
-    The radius scales with the image so that text-sized details vanish at any
-    resolution. The original pixels are never returned or stored.
-    """
-    with Image.open(io.BytesIO(image_bytes)) as image:
-        image = image.convert("RGB")
-        radius = max(config.BLUR_MIN_RADIUS, min(image.size) * config.BLUR_RATIO)
-        out = io.BytesIO()
-        image.filter(ImageFilter.GaussianBlur(radius)).save(out, format="PNG")
-        return out.getvalue()
-
-
-class ParserError(ValueError):
-    """The file cannot be processed (bad payload, too large, unsupported)."""
-
-
-def _decode(data_base64: str) -> bytes:
-    """Decode plain base64 or a ``data:...;base64,`` URL."""
-    if data_base64.startswith("data:"):
-        data_base64 = data_base64.partition(",")[2]
-    try:
-        return base64.b64decode(data_base64, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise ParserError("Invalid base64 payload.") from exc
-
-
 def _suffix(filename: str, mime: str | None) -> str:
     ext = os.path.splitext(filename)[1].lower()
     return ext or _EXT_BY_MIME.get((mime or "").lower(), "")
 
 
-def _word_boxes(item: Any, line_start: int) -> list[dict[str, Any]]:
-    """Word boxes of one text line, with offsets relative to the page text.
-
-    Uses the boxes LiteParse provides; OCR lines come without word boxes, so
-    the line box is split proportionally to each word's position in the text.
-    """
-    text = item.text
-    boxes: list[dict[str, Any]] = []
-    if item.words:
-        cursor = 0
-        for w in item.words:
-            idx = text.find(w.text, cursor)
-            if idx < 0:
-                continue
-            cursor = idx + len(w.text)
-            boxes.append(
-                {
-                    "text": w.text,
-                    "x": w.x,
-                    "y": w.y,
-                    "width": w.width,
-                    "height": w.height,
-                    "start": line_start + idx,
-                    "end": line_start + cursor,
-                }
-            )
-        if boxes:
-            return boxes
-    total = max(len(text), 1)
-    for m in _TOKEN_RE.finditer(text):
-        boxes.append(
-            {
-                "text": m.group(),
-                "x": item.x + item.width * m.start() / total,
-                "y": item.y,
-                "width": item.width * (m.end() - m.start()) / total,
-                "height": item.height,
-                "start": line_start + m.start(),
-                "end": line_start + m.end(),
-            }
-        )
-    return boxes
-
-
-def build_page(parsed_page: Any) -> dict[str, Any]:
-    """Convert a LiteParse page into our page dict (without image/filename)."""
-    lines: list[dict[str, Any]] = []
-    words: list[dict[str, Any]] = []
-    parts: list[str] = []
-    cursor = 0
-    for item in parsed_page.text_items:
-        text = item.text
-        if not text.strip():
-            continue
-        start = cursor
-        lines.append(
-            {
-                "text": text,
-                "x": item.x,
-                "y": item.y,
-                "width": item.width,
-                "height": item.height,
-                "start": start,
-                "end": start + len(text),
-                "confidence": item.confidence,
-            }
-        )
-        words.extend(_word_boxes(item, start))
-        parts.append(text)
-        cursor = start + len(text) + 1  # "\n" separator
-    return {
-        "width": parsed_page.width,
-        "height": parsed_page.height,
-        "content": "\n".join(parts),
-        "lines": lines,
-        "words": words,
-    }
-
-
 class ParserService(BaseService):
-    """OCR/parsing worker producing page images, text and word boxes."""
+    """OCR/parsing worker producing text, relative boxes and screenshots."""
 
     name = "liteparse-ocr"
     version = "0.1.0"
     description = (
-        "Document parsing and OCR (Tesseract via LiteParse): renders pages and "
-        "extracts text with word bounding boxes from PDFs and images."
+        "Document parsing and OCR (Tesseract via LiteParse): extracts text with "
+        "relative word boxes and stores a (blurred) screenshot of each page."
     )
     tags = ["ocr", "tesseract", "liteparse", "pdf", "image", "bbox"]
     type = "other"
-    queue = config.CELERY_QUEUE
-    input_schema = INPUT_SCHEMA
-    output_schema = OUTPUT_SCHEMA
+    queue = settings.CELERY_QUEUE
+    input_schema = ParserInput.model_json_schema()
+    output_schema = ParserOutput.model_json_schema()
 
-    def __init__(self, *, files: FileClient | None = None, **kwargs: Any) -> None:
+    def __init__(self, *, storage: Storage | None = None, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        self._files = files or FileClient(kwargs.get("base_url"))
+        self.storage = storage or Storage()
         self._parser: LiteParse | None = None
-
-    def _load_file(self, spec: dict[str, Any]) -> bytes:
-        """Bytes of one input file: from object storage, else inline base64."""
-        file_id = spec.get("file_id")
-        if file_id:
-            try:
-                return self._files.download(file_id)
-            except ClientError as exc:
-                raise ParserError(f"Cannot fetch file {file_id}: {exc}") from exc
-        return _decode(spec.get("data_base64", ""))
-
-    def _drop_sources(self, files: list[dict[str, Any]]) -> None:
-        """Remove the stored source files once parsed (best effort)."""
-        if not config.DELETE_SOURCE_AFTER_PARSE:
-            return
-        for spec in files:
-            file_id = spec.get("file_id")
-            if not file_id:
-                continue
-            try:
-                self._files.delete(file_id)
-            except ClientError as exc:
-                logger.warning("Could not delete source file %s: %s", file_id, exc)
 
     def _get_parser(self) -> LiteParse:
         if self._parser is None:
             self._parser = LiteParse(
-                ocr_language=config.OCR_LANGUAGE,
+                ocr_language=settings.OCR_LANGUAGE,
                 emit_word_boxes=True,
-                max_pages=config.MAX_PAGES,
+                max_pages=settings.MAX_PAGES,
                 quiet=True,
             )
         return self._parser
 
     def parse_file(
-        self, filename: str, mime: str | None, data: bytes, *, blur: bool = False
+        self,
+        filename: str,
+        mime: str | None,
+        data: bytes,
+        *,
+        key_prefix: str,
+        blur: bool = True,
     ) -> list[dict[str, Any]]:
-        """Parse one file into page dicts (image included, blurred on demand)."""
-        max_bytes = config.MAX_FILE_MB * 1024 * 1024
+        """Parse one file into pages.
+
+        Each screenshot (PNG, blurred unless ``blur`` is false) is uploaded to
+        ``<key_prefix>/<source page>.png`` straight away: pages only carry its
+        ``s3_key``, never the image bytes, and the unblurred pixels never leave
+        this method.
+        """
+        self.storage.require_configured()
+        max_bytes = settings.MAX_FILE_MB * 1024 * 1024
         if len(data) > max_bytes:
             raise ParserError(
-                f"'{filename}' exceeds the {config.MAX_FILE_MB:g} MB limit."
+                f"'{filename}' exceeds the {settings.MAX_FILE_MB:g} MB limit."
             )
-        suffix = _suffix(filename, mime)
         parser = self._get_parser()
         # LiteParse detects the format from the extension, so work on a file.
-        with tempfile.NamedTemporaryFile(suffix=suffix) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=_suffix(filename, mime)) as tmp:
             tmp.write(data)
             tmp.flush()
             try:
@@ -281,89 +107,70 @@ class ParserService(BaseService):
                 raise ParserError(f"Cannot parse '{filename}': {exc}") from exc
 
         pages: list[dict[str, Any]] = []
-        for parsed in result.pages[: config.MAX_PAGES]:
+        for parsed in result.pages[: settings.MAX_PAGES]:
             page = build_page(parsed)
             shot = shots.get(parsed.page_num)
-            image_bytes = (
-                (blur_png(shot.image_bytes) if blur else shot.image_bytes)
-                if shot
-                else None
-            )
-            page.update(
-                {
-                    "filename": filename,
-                    "source_page": parsed.page_num,
-                    "image": (
-                        "data:image/png;base64,"
-                        + base64.b64encode(image_bytes).decode()
-                        if image_bytes
-                        else None
-                    ),
-                    "blurred": blur,
-                }
-            )
-            pages.append(page)
+            if shot:
+                png = blur_png(shot.image_bytes) if blur else shot.image_bytes
+                page.s3_key = self.storage.write_png(
+                    f"{key_prefix}/{parsed.page_num}.png", png
+                )
+            page.filename = filename
+            page.source_page = parsed.page_num
+            page.blurred = blur
+            pages.append(page.model_dump())
         return pages
 
+    def _read_source(self, spec: InputFile) -> bytes:
+        """Read a source file, then delete it: the bytes are in memory."""
+        data = self.storage.read(spec.s3_key)
+        if settings.DELETE_SOURCE_AFTER_PARSE:
+            try:
+                self.storage.delete(spec.s3_key)
+            except StorageError as exc:
+                logger.warning("%s", exc)
+        return data
+
     def process(self, input_data: Any, task_id: str | None = None) -> dict[str, Any]:
-        files = (
-            (input_data or {}).get("files") if isinstance(input_data, dict) else None
-        )
-        blur = (
-            bool(input_data.get("blur_screenshots"))
-            if isinstance(input_data, dict)
-            else False
-        )
         self.update_task(task_id, status=TaskStatus.RUNNING, progress=0)
         try:
-            if not files:
+            try:
+                request = ParserInput.model_validate(input_data or {})
+            except ValidationError as exc:
+                raise ParserError(f"Invalid input: {exc}") from exc
+            if not request.files:
                 raise ParserError("No file provided (expected input 'files').")
+            # Checked before reading, so a misconfiguration never costs a source.
+            self.storage.require_configured()
+            blur = (
+                settings.BLUR_SCREENSHOTS
+                if request.blur_screenshots is None
+                else request.blur_screenshots
+            )
             pages: list[dict[str, Any]] = []
-            for index, f in enumerate(files):
-                data = self._load_file(f)
+            prefix = f"pages/{task_id or uuid.uuid4()}"
+            for index, spec in enumerate(request.files):
+                data = self._read_source(spec)
                 for page in self.parse_file(
-                    f.get("filename") or f"file-{index + 1}",
-                    f.get("mime"),
+                    spec.filename or os.path.basename(spec.s3_key),
+                    spec.mime,
                     data,
+                    key_prefix=f"{prefix}/{index + 1}",
                     blur=blur,
                 ):
                     page["page_number"] = len(pages) + 1
                     pages.append(page)
                 self.update_task(
-                    task_id, progress=round((index + 1) / len(files) * 100)
+                    task_id, progress=round((index + 1) / len(request.files) * 100)
                 )
         except Exception as exc:
-            self._scrub_input(task_id, files)
             self.update_task(task_id, status=TaskStatus.ERROR, error=str(exc))
             raise
 
-        result = {
-            "id": task_id or f"parser-{uuid.uuid4()}",
-            "pages": pages,
-            "error": None,
-        }
-        self._scrub_input(task_id, files)
-        self._drop_sources(files)
+        result = ParserOutput(
+            id=task_id or f"parser-{uuid.uuid4()}", pages=pages
+        ).model_dump()
         self.update_task(
             task_id, status=TaskStatus.SUCCESS, progress=100, output_data=result
         )
         return result
-
-    def _scrub_input(self, task_id: str | None, files: Any) -> None:
-        """Drop the uploaded bytes from the stored task (keeps polls light)."""
-        if not task_id or not files:
-            return
-        summary = {
-            "files": [
-                {
-                    "file_id": f.get("file_id"),
-                    "filename": f.get("filename"),
-                    "mime": f.get("mime"),
-                }
-                for f in files
-            ]
-        }
-        try:
-            self._tasks.update(task_id, {"input_data": summary})
-        except Exception as exc:  # noqa: BLE001 - best effort
-            logger.warning("Could not scrub input of task %s: %s", task_id, exc)

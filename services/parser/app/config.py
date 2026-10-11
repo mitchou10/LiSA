@@ -1,34 +1,55 @@
-"""Runtime configuration for the parser service, read from the environment."""
+"""Runtime configuration of the parser service, read from the environment."""
 
 from __future__ import annotations
 
-import os
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
-# Celery broker/result backend (Redis).
-REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-CELERY_BROKER_URL: str = os.getenv("CELERY_BROKER_URL", REDIS_URL)
-CELERY_RESULT_BACKEND: str = os.getenv("CELERY_RESULT_BACKEND", REDIS_URL)
 
-# Celery queue this worker consumes from.
-CELERY_QUEUE: str = os.getenv("CELERY_QUEUE", "liteparse-ocr")
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(case_sensitive=True, extra="ignore")
 
-# LiSA backend base URL (for self-registration and task updates).
-LISA_API_URL: str = os.getenv("LISA_API_URL", "http://localhost:8000")
+    # Celery broker/result backend (Redis). Both default to REDIS_URL.
+    REDIS_URL: str = "redis://localhost:6379/0"
+    CELERY_BROKER_URL: str = ""
+    CELERY_RESULT_BACKEND: str = ""
+    # Queue this worker consumes from.
+    CELERY_QUEUE: str = "liteparse-ocr"
 
-# Tesseract language(s), "+"-separated (e.g. "eng+fra").
-OCR_LANGUAGE: str = os.getenv("OCR_LANGUAGE", "eng+fra")
+    # LiSA backend base URL (self-registration and task updates).
+    LISA_API_URL: str = "http://localhost:8000"
 
-# Safety limits.
-MAX_FILE_MB: float = float(os.getenv("MAX_FILE_MB", "10"))
-MAX_PAGES: int = int(os.getenv("MAX_PAGES", "50"))
+    # Tesseract language(s), "+"-separated (e.g. "eng+fra").
+    OCR_LANGUAGE: str = "eng+fra"
 
-# Blur applied to page images when asked (Gaussian radius, in pixels):
-# max(BLUR_MIN_RADIUS, smallest image side * BLUR_RATIO).
-BLUR_MIN_RADIUS: float = float(os.getenv("BLUR_MIN_RADIUS", "20"))
-BLUR_RATIO: float = float(os.getenv("BLUR_RATIO", "0.03"))
+    # Safety limits.
+    MAX_FILE_MB: float = 10.0
+    MAX_PAGES: int = 50
 
-# Delete the source file from object storage once it has been parsed, so only
-# the extracted text / boxes / screenshots remain.
-DELETE_SOURCE_AFTER_PARSE: bool = os.getenv(
-    "DELETE_SOURCE_AFTER_PARSE", "true"
-).lower() in ("1", "true", "yes")
+    # Blur the page screenshots by default (override per task with the
+    # ``blur_screenshots`` input). Gaussian radius, in pixels:
+    # max(BLUR_MIN_RADIUS, smallest image side * BLUR_RATIO).
+    BLUR_SCREENSHOTS: bool = True
+    BLUR_MIN_RADIUS: float = 20.0
+    BLUR_RATIO: float = 0.03
+
+    # Delete the source file from the bucket as soon as it has been read, so
+    # only the extracted text / boxes / screenshots remain.
+    DELETE_SOURCE_AFTER_PARSE: bool = True
+
+    # Object storage: sources are read from, and page screenshots written to,
+    # this bucket (required to process a task).
+    S3_BUCKET: str = ""
+    S3_ENDPOINT_URL: str = ""
+    S3_REGION: str = ""
+    S3_ACCESS_KEY: str = ""
+    S3_SECRET_KEY: str = ""
+
+    @model_validator(mode="after")
+    def _default_celery_urls(self) -> Settings:
+        self.CELERY_BROKER_URL = self.CELERY_BROKER_URL or self.REDIS_URL
+        self.CELERY_RESULT_BACKEND = self.CELERY_RESULT_BACKEND or self.REDIS_URL
+        return self
+
+
+settings = Settings()

@@ -175,6 +175,11 @@ services:
       LISA_API_URL: http://server:8000
       LISA_SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-service-token}
       CELERY_QUEUE: ${ANONYMIZE_QUEUE:-llm-guard-anonymize}
+      AWS_S3_ENDPOINT_URL: http://rustfs:9000
+      AWS_S3_BUCKET: ${S3_BUCKET:-lisa-files}
+      AWS_S3_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      AWS_SECRET_ACCESS_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
     depends_on:
       redis:
         condition: service_healthy
@@ -238,6 +243,10 @@ services:
       LISA_SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-service-token}
       CELERY_QUEUE: ${PARSER_QUEUE:-liteparse-ocr}
       OCR_LANGUAGE: ${OCR_LANGUAGE:-eng+fra}
+      S3_ENDPOINT_URL: http://rustfs:9000
+      S3_BUCKET: ${S3_BUCKET:-lisa-files}
+      S3_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-rustfsadmin}
+      S3_SECRET_KEY: ${RUSTFS_SECRET_KEY:-rustfsadmin}
     depends_on:
       redis:
         condition: service_healthy

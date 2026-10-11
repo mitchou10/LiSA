@@ -11,7 +11,7 @@ import zlib
 
 from liteparse import LiteParse
 
-from app import config
+from app.config import settings
 
 
 def _png(width: int = 64, height: int = 64) -> bytes:
@@ -32,5 +32,5 @@ def _png(width: int = 64, height: int = 64) -> bytes:
 
 
 if __name__ == "__main__":
-    LiteParse(ocr_language=config.OCR_LANGUAGE, quiet=True).parse(_png())
-    print(f"Tesseract data ready for '{config.OCR_LANGUAGE}'.")
+    LiteParse(ocr_language=settings.OCR_LANGUAGE, quiet=True).parse(_png())
+    print(f"Tesseract data ready for '{settings.OCR_LANGUAGE}'.")
