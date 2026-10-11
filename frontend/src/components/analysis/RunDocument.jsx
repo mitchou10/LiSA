@@ -358,6 +358,14 @@ export default function RunDocument({ run, source }) {
                 {l.label} <span className="ml-1 tabular-nums opacity-70">{pct(l.score)}</span>
               </Badge>
             ))}
+          {page.imageClassifications.flatMap((c) =>
+            c.labels.map((label) => (
+              <Badge key={`img-${c.name}-${label}`} title={`${t("run.doc.image")} · ${c.name}`}>
+                {t("run.doc.image")}: {c.name}: {label}
+                <span className="ml-1 tabular-nums opacity-70">{pct(c.scores?.[label])}</span>
+              </Badge>
+            ))
+          )}
           {page.classifications.flatMap((c) =>
             c.labels.length ? (
               c.labels.map((label) => (

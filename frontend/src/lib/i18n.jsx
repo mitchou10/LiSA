@@ -360,6 +360,10 @@ export const translations = {
     "run.doc.anonymized": "Anonymized text: every character is hidden, each entity shows as its label.",
     "run.doc.head": "head",
     "run.doc.tail": "tail",
+    "run.step.image_classification": "Image classification (CLIP)",
+    "run.doc.image": "image",
+    "run.classifyImages": "Also classify the page images (CLIP)",
+    "run.classifyImages.hint": "Uses the same classifications, on what each page looks like. CLIP reads English descriptions, and a blurred screenshot keeps the layout but not the text.",
   },
   fr: {
     "app.subtitle": "Détection de jailbreak & prompt injection — supervision",
@@ -720,6 +724,10 @@ export const translations = {
     "run.doc.anonymized": "Texte anonymisé : tous les caractères sont cachés, chaque entité apparaît sous son label.",
     "run.doc.head": "tête",
     "run.doc.tail": "queue",
+    "run.step.image_classification": "Classification d'images (CLIP)",
+    "run.doc.image": "image",
+    "run.classifyImages": "Classer aussi les images des pages (CLIP)",
+    "run.classifyImages.hint": "Utilise les mêmes classifications, sur l'apparence de chaque page. CLIP lit des descriptions en anglais, et une capture floutée garde la mise en page mais pas le texte.",
   },
 };
 
