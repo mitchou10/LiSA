@@ -1,15 +1,7 @@
-import os
-
-os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
-# Use a shared in-memory SQLite database across the async connections.
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
-
-from app.database import Base, engine
-from app.main import app
+from app.config import get_settings
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -17,29 +9,8 @@ def _event_loop_policy():
     yield
 
 
-@pytest.fixture
-async def client():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-    # Seed the default admin (lifespan is not triggered by ASGITransport).
-    from app.database import async_session_factory
-    from app.services.user import UserService
-
-    async with async_session_factory() as session:
-        await UserService(session).ensure_admin("admin", "admin")
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
-
-
 async def _admin_headers(client: AsyncClient) -> dict[str, str]:
-    resp = await client.post(
-        "/api/v1/auth/login", json={"username": "admin", "password": "admin"}
-    )
-    assert resp.status_code == 200, resp.text
-    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+    return {"Authorization": "Bearer test-service-token"}
 
 
 async def test_health(client: AsyncClient):
@@ -48,19 +19,29 @@ async def test_health(client: AsyncClient):
     assert resp.json()["status"] == "ok"
 
 
-async def test_auth_login_and_me(client: AsyncClient):
-    # Wrong password is rejected.
-    resp = await client.post(
-        "/api/v1/auth/login", json={"username": "admin", "password": "nope"}
-    )
+async def test_auth_me_and_config(client: AsyncClient):
+    resp = await client.get("/api/v1/auth/config")
+    assert resp.json() == {"provider": "keycloak"}
+
+    # No credentials, or a wrong token, is rejected (Keycloak is not reachable
+    # in tests, so an unknown bearer cannot be verified).
+    assert (await client.get("/api/v1/auth/me")).status_code == 401
+    resp = await client.get("/api/v1/auth/me", headers={"Authorization": "Bearer nope"})
     assert resp.status_code == 401
 
     headers = await _admin_headers(client)
     resp = await client.get("/api/v1/auth/me", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
-    assert body["username"] == "admin"
+    assert body["username"] == "service"
     assert body["role"] == "admin"
+
+
+async def test_local_login_is_gone(client: AsyncClient):
+    resp = await client.post(
+        "/api/v1/auth/login", json={"username": "admin", "password": "admin"}
+    )
+    assert resp.status_code == 405  # only GET /auth/login (OIDC redirect) remains
 
 
 async def test_protected_requires_auth(client: AsyncClient):
@@ -87,22 +68,16 @@ async def test_protected_requires_auth(client: AsyncClient):
     ).status_code == 200
 
 
-async def test_service_token_grants_machine_access(client: AsyncClient):
+async def test_service_token_grants_machine_access(client: AsyncClient, monkeypatch):
     # The worker authenticates with the configured service token.
-    from app.config import get_settings
-
-    settings = get_settings()
-    settings.service_token = "worker-secret"
-    try:
-        headers = {"Authorization": "Bearer worker-secret"}
-        resp = await client.post(
-            "/api/v1/tasks",
-            json={"user_id": "svc", "input_data": {"text": "hi"}},
-            headers=headers,
-        )
-        assert resp.status_code == 201, resp.text
-    finally:
-        settings.service_token = None
+    monkeypatch.setattr(get_settings(), "service_token", "worker-secret")
+    headers = {"Authorization": "Bearer worker-secret"}
+    resp = await client.post(
+        "/api/v1/tasks",
+        json={"user_id": "svc", "input_data": {"text": "hi"}},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
 
 
 async def test_service_crud(client: AsyncClient):

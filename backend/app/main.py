@@ -14,21 +14,8 @@ from app.services.exceptions import (
     InvalidStateError,
     NotFoundError,
 )
-from app.services.user import UserService
 
 settings = get_settings()
-
-
-async def _seed_admin() -> None:
-    """Create the default admin account on startup (local auth only)."""
-    if settings.auth_provider != "local":
-        return
-    async with async_session_factory() as session:
-        await UserService(session).ensure_admin(
-            settings.admin_username,
-            settings.admin_password,
-            settings.admin_email,
-        )
 
 
 async def _seed_detection_profiles() -> None:
@@ -41,7 +28,6 @@ async def _seed_detection_profiles() -> None:
 async def lifespan(_: FastAPI):
     if settings.run_migrations:
         await run_migrations()
-    await _seed_admin()
     await _seed_detection_profiles()
     yield
 

@@ -3,7 +3,6 @@ from app.models.enums import ServiceType, TaskStatus, UserRole
 from app.models.file import StoredFile
 from app.models.service import Service
 from app.models.task import Task
-from app.models.user import User
 
 __all__ = [
     "DetectionProfile",
@@ -13,6 +12,5 @@ __all__ = [
     "StoredFile",
     "Task",
     "TaskStatus",
-    "User",
     "UserRole",
 ]

@@ -1,16 +1,8 @@
-import os
-
-os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///./test.db"
-
 import pytest
-from httpx import ASGITransport, AsyncClient
 
-from app.database import Base, async_session_factory, engine
-from app.main import app
+from app.database import async_session_factory
 from app.models.enums import UserRole
-from app.schemas.auth import UserCreate
 from app.services.detection_profile import DetectionProfileService
-from app.services.user import UserService
 
 URL = "/api/v1/detection-profiles/gliner-ner"
 
@@ -27,29 +19,14 @@ def published(monkeypatch):
     return calls
 
 
-@pytest.fixture
-async def client(published):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+@pytest.fixture(autouse=True)
+async def seeded(client, published):
     async with async_session_factory() as session:
-        await UserService(session).ensure_admin("admin", "admin")
-        await UserService(session).create(
-            UserCreate(username="bob", password="bobpass1", role=UserRole.USER)
-        )
         await DetectionProfileService(session).ensure_defaults()
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as ac:
-        yield ac
 
 
-async def _headers(client: AsyncClient, username="admin", password="admin"):
-    resp = await client.post(
-        "/api/v1/auth/login", json={"username": username, "password": password}
-    )
-    assert resp.status_code == 200, resp.text
-    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+async def _headers(client, admin_headers=None):
+    return {"Authorization": "Bearer test-service-token"}
 
 
 def _config(**overrides):
@@ -91,7 +68,7 @@ async def test_create_version_becomes_active(client, published):
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert body["version"] == 2
-    assert body["created_by"] == "admin"
+    assert body["created_by"] == "service"
     # Category is normalized, missing fields get defaults.
     assert body["config"]["entities"][0]["category"] == "PII"
     assert body["config"]["entities"][0]["enabled"] is True
@@ -183,8 +160,9 @@ async def test_requires_authentication(client):
     assert resp.status_code == 401
 
 
-async def test_non_admin_can_read_but_not_write(client):
-    headers = await _headers(client, "bob", "bobpass1")
+async def test_non_admin_can_read_but_not_write(client, login_as):
+    login_as("bob", UserRole.USER)
+    headers = {}
     assert (await client.get(URL, headers=headers)).status_code == 200
     resp = await client.post(
         URL + "/versions", json={"config": _config()}, headers=headers

@@ -5,30 +5,13 @@ const BASE_URL = (
 
 const API_V1 = `${BASE_URL}/api/v1`;
 
-const TOKEN_KEY = "lisa_token";
-
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token) {
-  if (token) localStorage.setItem(TOKEN_KEY, token);
-  else localStorage.removeItem(TOKEN_KEY);
-}
-
-export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
-}
-
 async function request(path, options = {}) {
-  const token = getToken();
   const res = await fetch(`${API_V1}${path}`, {
     // BFF mode: the session cookie is the credential (HttpOnly, never read here).
     credentials: "include",
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -36,7 +19,14 @@ async function request(path, options = {}) {
     let detail = `${res.status} ${res.statusText}`;
     try {
       const body = await res.json();
-      if (body?.detail) detail = body.detail;
+      if (Array.isArray(body?.detail)) {
+        // FastAPI validation errors: [{loc, msg}, ...]
+        detail = body.detail
+          .map((d) => `${(d.loc || []).slice(1).join(".")}: ${d.msg}`.replace(/^: /, ""))
+          .join("; ");
+      } else if (body?.detail) {
+        detail = body.detail;
+      }
     } catch {
       /* ignore non-JSON error bodies */
     }
@@ -55,21 +45,8 @@ export async function getHealth() {
 }
 
 // Authentication ----------------------------------------------------------
-export async function login({ username, password }) {
-  const data = await request("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  });
-  setToken(data.access_token);
-  return data;
-}
-
-export async function getAuthConfig() {
-  return request("/auth/config");
-}
-
-// Keycloak (BFF): the browser is redirected to the backend, which runs the
-// OIDC flow and sets the session cookie. No token ever reaches JavaScript.
+// Keycloak only. The browser is redirected to the backend, which runs the OIDC
+// flow and sets the session cookie: no token ever reaches JavaScript.
 export function oidcLoginUrl(redirect = "/dashboard") {
   return `${API_V1}/auth/login?redirect=${encodeURIComponent(redirect)}`;
 }
@@ -81,10 +58,6 @@ export async function oidcLogout() {
 
 export async function getMe() {
   return request("/auth/me");
-}
-
-export function logout() {
-  clearToken();
 }
 
 export async function submitTask({
