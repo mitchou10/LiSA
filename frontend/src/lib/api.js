@@ -168,8 +168,8 @@ export async function getServices(params = {}) {
 }
 
 // Aggregated analytics for the monitoring dashboard.
-export async function getDashboardStats({ userId, days = 30 } = {}) {
-  const query = buildQuery({ user_id: userId, days });
+export async function getDashboardStats({ userId, projectId, days = 30 } = {}) {
+  const query = buildQuery({ user_id: userId, project_id: projectId, days });
   return request(`/analytics/dashboard${query}`);
 }
 
