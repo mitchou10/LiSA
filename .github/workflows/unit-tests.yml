@@ -1,8 +1,9 @@
 name: Unit Tests
 
-# Backend only: the frontend has no test suite, and the worker services need
-# heavy ML dependencies (gliner, llm-guard, liteparse) that are not installed
-# here. Add jobs for them once their tests can run against mocks alone.
+# Backend and the anonymize service. The frontend has no test suite, and the
+# other worker services need heavy dependencies (gliner, llm-guard, liteparse)
+# that are not installed here. Add jobs for them once their tests can run
+# against mocks alone.
 
 on:
   workflow_call:
@@ -12,6 +13,11 @@ on:
         required: false
         type: string
         default: "3.13"
+      SERVICES_PYTHON_VERSION:
+        description: Python version used to run the worker services tests
+        required: false
+        type: string
+        default: "3.12"
   workflow_dispatch:
     inputs:
       PYTHON_VERSION:
@@ -19,6 +25,11 @@ on:
         required: false
         type: string
         default: "3.13"
+      SERVICES_PYTHON_VERSION:
+        description: Python version used to run the worker services tests
+        required: false
+        type: string
+        default: "3.12"
 
 jobs:
   unit-tests-backend:
@@ -44,3 +55,30 @@ jobs:
       - name: Run tests
         working-directory: backend
         run: uv run pytest -q
+
+  # The services pin Python < 3.13 (their ML dependencies), hence a separate version.
+  unit-tests-anonymize:
+    name: services/anonymize
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          python-version: ${{ inputs.SERVICES_PYTHON_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: |
+            services/anonymize/pyproject.toml
+            worker/pyproject.toml
+
+      - name: Install service dependencies
+        working-directory: services/anonymize
+        run: uv sync --extra dev
+
+      - name: Run tests
+        working-directory: services/anonymize
+        run: uv run pytest
