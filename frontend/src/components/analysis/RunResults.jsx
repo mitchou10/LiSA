@@ -1,5 +1,6 @@
 import { AlertTriangle, CheckCircle2, Circle, Loader2, XCircle } from "lucide-react";
 import { Badge } from "../ui/badge";
+import { formatDuration } from "../../lib/runModel";
 import { cn } from "../../lib/utils";
 import { useI18n } from "../../lib/i18n.jsx";
 
@@ -208,6 +209,14 @@ function Step({ step, t }) {
         {step.waiting && status === "pending" && (
           <span className="text-xs text-muted-foreground">{t("run.waiting")}</span>
         )}
+        {step.duration != null && (
+          <span
+            className="text-xs tabular-nums text-muted-foreground"
+            title={t("run.duration.hint")}
+          >
+            {formatDuration(step.duration)}
+          </span>
+        )}
         <Badge variant={status === "error" ? "destructive" : "muted"}>
           {t(`status.${status}`)}
         </Badge>
@@ -232,6 +241,14 @@ export default function RunResults({ run }) {
   if (!run) return null;
   return (
     <div className="space-y-3">
+      {run.duration != null && (
+        <p className="text-sm text-muted-foreground" title={t("run.duration.hint")}>
+          {t("run.duration.total")}:{" "}
+          <span className="font-medium tabular-nums text-foreground">
+            {formatDuration(run.duration)}
+          </span>
+        </p>
+      )}
       {run.steps.map((step) => (
         <Step key={step.task_id} step={step} t={t} />
       ))}

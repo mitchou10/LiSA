@@ -99,3 +99,12 @@ export function segments(content, spans) {
     };
   });
 }
+
+// 0.32 -> "320 ms", 3.4 -> "3.4 s", 72 -> "1 min 12 s".
+export function formatDuration(seconds) {
+  if (seconds == null) return "";
+  if (seconds < 1) return `${Math.round(seconds * 1000)} ms`;
+  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)} s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes} min ${Math.round(seconds - minutes * 60)} s`;
+}

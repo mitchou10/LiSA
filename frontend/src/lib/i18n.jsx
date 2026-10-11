@@ -341,7 +341,7 @@ export const translations = {
     "run.step.relation": "Relations",
     "run.step.classification": "Classifications",
     "run.step.safety": "Safety",
-    "run.waiting": "waiting for the parser",
+    "run.waiting": "waiting for an earlier step",
     "run.page": "Page",
     "run.nothing": "Nothing found.",
     "run.pagesParsed": "page(s) parsed",
@@ -364,6 +364,8 @@ export const translations = {
     "run.doc.image": "image",
     "run.classifyImages": "Also classify the page images (CLIP)",
     "run.classifyImages.hint": "Uses the same classifications, on what each page looks like. CLIP reads English descriptions, and a blurred screenshot keeps the layout but not the text.",
+    "run.duration.total": "Compute time",
+    "run.duration.hint": "From the worker's start to its end: the wait in the queue is not counted, and the first analysis after a start includes loading the model.",
   },
   fr: {
     "app.subtitle": "Détection de jailbreak & prompt injection — supervision",
@@ -705,7 +707,7 @@ export const translations = {
     "run.step.relation": "Relations",
     "run.step.classification": "Classifications",
     "run.step.safety": "Sécurité",
-    "run.waiting": "attend le parser",
+    "run.waiting": "attend une étape précédente",
     "run.page": "Page",
     "run.nothing": "Rien trouvé.",
     "run.pagesParsed": "page(s) parsée(s)",
@@ -728,6 +730,8 @@ export const translations = {
     "run.doc.image": "image",
     "run.classifyImages": "Classer aussi les images des pages (CLIP)",
     "run.classifyImages.hint": "Utilise les mêmes classifications, sur l'apparence de chaque page. CLIP lit des descriptions en anglais, et une capture floutée garde la mise en page mais pas le texte.",
+    "run.duration.total": "Temps de calcul",
+    "run.duration.hint": "Du début à la fin du travail du worker : l'attente dans la file n'est pas comptée, et la première analyse après un démarrage inclut le chargement du modèle.",
   },
 };
 
