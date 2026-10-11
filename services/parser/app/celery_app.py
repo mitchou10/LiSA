@@ -39,7 +39,8 @@ def _register_service(**_kwargs: object) -> None:
     """Register the service with the backend when the worker comes up."""
     from app.tasks import get_service
 
+    # In the background and with retries: the backend may not be up yet.
     try:
-        get_service().register()
+        get_service().register_in_background()
     except Exception as exc:  # noqa: BLE001 - never crash the worker on registration
-        logger.warning("Service registration failed: %s", exc)
+        logger.warning("Service registration could not start: %s", exc)

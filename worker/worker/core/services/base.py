@@ -9,9 +9,15 @@ otherwise it is created.
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any
 
+import httpx
+
+from worker.core.client.base import ClientError
 from worker.core.client.services import ServiceClient
 from worker.core.client.tasks import TaskClient
 
@@ -135,6 +141,58 @@ class BaseService(ABC):
         self.id = created["id"]
         logger.info("Service '%s' registered (id=%s).", self.name, self.id)
         return created
+
+    def register_with_retry(
+        self,
+        *,
+        attempts: int = 60,
+        delay: float = 2.0,
+        max_delay: float = 15.0,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> dict[str, Any] | None:
+        """Register, waiting for the backend if it is not up yet.
+
+        Workers often start before the backend answers: a single attempt would
+        leave the service unregistered for good. Connection errors and 5xx are
+        retried with a growing delay; any other error (bad token, invalid
+        definition) cannot fix itself, so it is logged and abandoned.
+        Returns the registered service, or ``None`` when it gave up.
+        """
+        wait = delay
+        for attempt in range(1, attempts + 1):
+            try:
+                return self.register()
+            except (httpx.TransportError, ClientError) as exc:
+                if isinstance(exc, ClientError) and exc.status_code < 500:
+                    logger.error("Service '%s' cannot register: %s", self.name, exc)
+                    return None
+                logger.warning(
+                    "Backend not ready (%s), registering '%s' again in %.0fs "
+                    "(attempt %d/%d)",
+                    exc,
+                    self.name,
+                    wait,
+                    attempt,
+                    attempts,
+                )
+                if attempt < attempts:
+                    sleep(wait)
+                    wait = min(wait * 1.5, max_delay)
+        logger.error(
+            "Service '%s' gave up registering after %d attempts.", self.name, attempts
+        )
+        return None
+
+    def register_in_background(self, **kwargs: Any) -> threading.Thread:
+        """``register_with_retry`` on a daemon thread, so the worker keeps starting."""
+        thread = threading.Thread(
+            target=self.register_with_retry,
+            kwargs=kwargs,
+            name=f"register-{self.name}",
+            daemon=True,
+        )
+        thread.start()
+        return thread
 
     # -- processing --------------------------------------------------------
     @abstractmethod
