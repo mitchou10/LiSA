@@ -13,6 +13,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# Current packaging tools (the base image ships ones with known CVEs).
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
@@ -32,6 +35,15 @@ ARG CLASSIFIER_BACKEND=gliner2
 ARG CLASSIFIER_MODEL=fastino/gliner2.5-multi-v1
 ENV CLASSIFIER_BACKEND=${CLASSIFIER_BACKEND} \
     CLASSIFIER_MODEL=${CLASSIFIER_MODEL}
+ENV HF_HOME=/opt/hf
 RUN python -m app.warmup
+
+# Run as an unprivileged user.
+RUN useradd --system --uid 10001 --home-dir /app app \
+    && mkdir -p /opt/hf && chown -R app:app /app /opt/hf
+USER app
+
+HEALTHCHECK --interval=60s --timeout=20s --start-period=120s --retries=3 \
+    CMD celery -A app.celery_app.celery_app inspect ping -d celery@$HOSTNAME || exit 1
 
 CMD ["celery", "-A", "app.celery_app.celery_app", "worker", "--loglevel=info", "--concurrency=1"]
