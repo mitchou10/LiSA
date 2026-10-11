@@ -85,6 +85,7 @@ jobs:
         - safety
         - gliner
         - parser
+        - classification
     with:
       IMAGE: ${{ needs.list-closed-prs.outputs.image-base }}/${{ matrix.service }}:pr-${{ matrix.pr.number }}
 
@@ -104,6 +105,7 @@ jobs:
         - safety
         - gliner
         - parser
+        - classification
     with:
       IMAGE: ${{ needs.list-closed-prs.outputs.image-base }}/${{ matrix.service }}
       CLEAN_TAGGED: false

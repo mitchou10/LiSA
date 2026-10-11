@@ -120,6 +120,9 @@ jobs:
           - name: parser
             context: .
             dockerfile: services/parser/Dockerfile
+          - name: classification
+            context: .
+            dockerfile: services/classification/Dockerfile
     with:
       IMAGE_NAME: ${{ needs.expose-vars.outputs.IMAGE_BASE }}/${{ matrix.service.name }}
       IMAGE_TAG: ${{ needs.release.outputs.version }}
