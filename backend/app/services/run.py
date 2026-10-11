@@ -28,10 +28,12 @@ from app.repositories.service import ServiceRepository
 from app.schemas.auth import CurrentUser
 from app.schemas.run import RunCreate, RunRead, RunStep
 from app.services.exceptions import ConflictError, NotFoundError
+from app.services.privacy import mask_text_fields
 from app.services.project import KINDS, ProjectService
 from app.services.task import TaskService
 
 PARSER = "liteparse-ocr"
+ANONYMIZE = "anonymize-v2"
 
 # kind of definition -> (step name, service name, RunCreate field)
 ANALYSES = {
@@ -166,9 +168,14 @@ class RunService:
                 "Nothing to apply: this project has no enabled definition "
                 "(or none was selected)."
             )
+        if data.anonymize and "entities" not in selected:
+            raise ConflictError(
+                "Anonymizing needs entities to hide: apply at least one entity."
+            )
         files = await self._files(user, data.file_ids)
         parser = await self._service(PARSER) if files else None
         workers = {kind: await self._service(ANALYSES[kind][1]) for kind in selected}
+        anonymizer = await self._service(ANONYMIZE) if data.anonymize else None
 
         parent = Task(
             user_id=user.id,
@@ -179,11 +186,14 @@ class RunService:
                 "source": "files" if files else "text",
                 "file_ids": [str(f.id) for f in files],
                 "selected": {k: [str(d.id) for d in v] for k, v in selected.items()},
+                "anonymize": data.anonymize,
             },
         )
         self.session.add(parent)
         await self.session.flush()
 
+        # step task -> the input its worker gets, when it differs from the row.
+        clear_inputs: dict[uuid.UUID, dict[str, Any]] = {}
         steps: list[tuple[str, Task, Service]] = []
         parser_task: Task | None = None
         if files:
@@ -207,7 +217,24 @@ class RunService:
             else:
                 payload["pages"] = pages
             task = self._child(parent, user, workers[kind].id, payload)
+            if data.anonymize and "pages" in payload:
+                # The text is only sent, never stored: the row gets a masked copy.
+                clear_inputs[task.id] = payload
+                task.input_data = mask_text_fields(payload)
             steps.append((step, task, workers[kind]))
+            if kind == "entities":
+                ner_task = task
+
+        if anonymizer is not None:
+            # Waits for the ner task: it needs the entities, and the pages that
+            # task received.
+            anonymize_task = self._child(
+                parent,
+                user,
+                anonymizer.id,
+                {"awaiting": str(ner_task.id), "feed": "anonymize"},
+            )
+            steps.append(("anonymize", anonymize_task, anonymizer))
 
         for f in files:
             f.project_id = f.project_id or project.id  # files join the project
@@ -217,7 +244,7 @@ class RunService:
         # is released when it succeeds.
         for _, task, _ in steps:
             if "awaiting" not in task.input_data:
-                await self.tasks.dispatch(task)
+                await self.tasks.dispatch(task, clear_inputs.get(task.id))
 
         return RunRead(
             id=parent.id,

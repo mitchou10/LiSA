@@ -29,6 +29,9 @@ celery_app.conf.update(
     result_serializer="json",
     accept_content=["json"],
     task_track_started=True,
+    # Results go back through the API: nothing readable lingers in the Redis
+    # result backend (the backend never reads Celery results).
+    task_ignore_result=True,
     worker_prefetch_multiplier=1,
     # Consume from (and default-route to) this service's own queue so that
     # heterogeneous workers never receive tasks they cannot handle.
