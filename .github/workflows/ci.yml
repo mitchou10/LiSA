@@ -39,6 +39,7 @@ jobs:
       worker: ${{ steps.filter.outputs.worker }}
       anonymize: ${{ steps.filter.outputs.anonymize }}
       classification: ${{ steps.filter.outputs.classification }}
+      safety: ${{ steps.filter.outputs.safety }}
       services: ${{ steps.filter.outputs.services }}
       helm: ${{ steps.filter.outputs.helm }}
       ci: ${{ steps.filter.outputs.ci }}
@@ -65,6 +66,7 @@ jobs:
               - 'worker/**'
             safety:
               - 'services/safety/**'
+              - 'worker/**'
             gliner:
               - 'services/gliner/**'
             parser:
@@ -183,7 +185,7 @@ jobs:
     needs:
       - path-filter
       - expose-vars
-    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.anonymize == 'true' || needs.path-filter.outputs.classification == 'true' || needs.path-filter.outputs.ci == 'true' }}
+    if: ${{ needs.path-filter.outputs.backend == 'true' || needs.path-filter.outputs.anonymize == 'true' || needs.path-filter.outputs.classification == 'true' || needs.path-filter.outputs.safety == 'true' || needs.path-filter.outputs.ci == 'true' }}
     permissions:
       contents: read
     with:
