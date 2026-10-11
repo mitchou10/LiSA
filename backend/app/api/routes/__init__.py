@@ -6,6 +6,7 @@ from app.api.routes import (
     detection_profiles,
     files,
     health,
+    projects,
     services,
     tasks,
 )
@@ -15,6 +16,7 @@ api_router.include_router(auth.router)
 api_router.include_router(services.router)
 api_router.include_router(tasks.router)
 api_router.include_router(files.router)
+api_router.include_router(projects.router)
 api_router.include_router(analytics.router)
 api_router.include_router(detection_profiles.router)
 

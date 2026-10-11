@@ -11,7 +11,7 @@ from app.core import storage
 from app.models.file import StoredFile
 from app.repositories.file import FileRepository
 from app.schemas.auth import CurrentUser
-from app.services.exceptions import NotFoundError
+from app.services.exceptions import GoneError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,14 @@ class FileService:
 
     async def read(self, file_id: UUID, user: CurrentUser) -> tuple[StoredFile, bytes]:
         obj = await self.get(file_id, user)
-        return obj, await storage.get_object(obj.storage_key)
+        try:
+            return obj, await storage.get_object(obj.storage_key)
+        except storage.ObjectNotFoundError as exc:
+            # The parser deletes a source once read: the metadata (name, size,
+            # sha256) stays, the bytes are gone.
+            raise GoneError(
+                f"The content of file {file_id} was deleted from storage."
+            ) from exc
 
     async def delete(self, file_id: UUID, user: CurrentUser) -> None:
         obj = await self.get(file_id, user)

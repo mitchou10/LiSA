@@ -3,6 +3,7 @@ import {
   ScanSearch,
   Languages,
   LogIn,
+  FolderKanban,
 } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { cn } from "./lib/utils";
@@ -16,10 +17,13 @@ import ServicesPage from "./pages/ServicesPage";
 import TaskDetailPage from "./pages/TaskDetailPage";
 import DashboardPage from "./pages/DashboardPage";
 import SensitiveDataPage from "./pages/SensitiveDataPage";
+import ProjectsPage from "./pages/ProjectsPage";
+import ProjectPage from "./pages/ProjectPage";
 import LoginPage from "./pages/LoginPage";
 
 const NAV = [
   { to: "/analysis", labelKey: "nav.analyze", icon: ScanSearch },
+  { to: "/projects", labelKey: "nav.projects", icon: FolderKanban },
 ];
 
 export default function App() {
@@ -101,6 +105,22 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <AnalysisPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects"
+            element={
+              <ProtectedRoute>
+                <ProjectsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/projects/:projectId"
+            element={
+              <ProtectedRoute>
+                <ProjectPage />
               </ProtectedRoute>
             }
           />

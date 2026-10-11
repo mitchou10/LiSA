@@ -9,6 +9,7 @@ class FileRead(BaseModel):
 
     id: UUID
     owner_id: str
+    project_id: UUID | None = None
     filename: str
     mime: str | None = None
     size: int

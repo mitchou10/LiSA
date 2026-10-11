@@ -8,3 +8,7 @@ class ConflictError(Exception):
 
 class InvalidStateError(Exception):
     """Raised when an operation is not allowed in the current state."""
+
+
+class GoneError(Exception):
+    """Raised when a resource existed but its content has been deleted."""

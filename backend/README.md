@@ -31,6 +31,9 @@ app/
 - `POST /api/v1/tasks/{id}/revoke` — cancel.
 - `POST /api/v1/tasks/{id}/retry` — re-queue a failed/revoked task.
 - `DELETE /api/v1/tasks/{id}` — delete.
+- `GET/POST /api/v1/projects`, `GET/PATCH/DELETE /api/v1/projects/{id}` — projects (owner or admin only).
+- `GET/POST /api/v1/projects/{id}/{entities|relations|classifications|safety}`, `GET/PATCH/DELETE .../{definition_id}` — what a project looks for (classification and safety carry labels; safety labels can be `is_ok`).
+- `POST /api/v1/projects/{id}/runs` — analyse a `text` or `file_ids` with the project's definitions (omit a `*_ids` list for every enabled one, `[]` to skip a kind). A text goes straight to the analysis workers as pages; files go to the parser first and the analysis tasks wait for its pages. Returns the run: a parent task whose children are the workers, to poll with `/tasks`.
 - `POST /api/v1/files` (multipart `file`) — store a file in object storage (RustFS, S3 API), returns its id, size and sha256.
 - `GET /api/v1/files/{id}`, `GET /api/v1/files/{id}/content`, `DELETE /api/v1/files/{id}` — metadata / bytes / delete. Only the owner and admins (including the service token) can access a file.
 

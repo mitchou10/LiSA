@@ -18,6 +18,7 @@ class TaskRepository(BaseRepository[Task]):
         status: TaskStatus | None = None,
         service_id: UUID | None = None,
         roots_only: bool = False,
+        project_id: UUID | None = None,
     ):
         stmt = select(Task)
         if user_id is not None:
@@ -28,6 +29,8 @@ class TaskRepository(BaseRepository[Task]):
             stmt = stmt.where(Task.service_id == service_id)
         if roots_only:
             stmt = stmt.where(Task.parent_task_id.is_(None))
+        if project_id is not None:
+            stmt = stmt.where(Task.project_id == project_id)
         return stmt
 
     async def list_filtered(
@@ -37,6 +40,7 @@ class TaskRepository(BaseRepository[Task]):
         status: TaskStatus | None = None,
         service_id: UUID | None = None,
         roots_only: bool = False,
+        project_id: UUID | None = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[Task]:
@@ -46,6 +50,7 @@ class TaskRepository(BaseRepository[Task]):
                 status=status,
                 service_id=service_id,
                 roots_only=roots_only,
+                project_id=project_id,
             )
             .order_by(Task.created_at.desc())
             .limit(limit)
@@ -61,12 +66,14 @@ class TaskRepository(BaseRepository[Task]):
         status: TaskStatus | None = None,
         service_id: UUID | None = None,
         roots_only: bool = False,
+        project_id: UUID | None = None,
     ) -> int:
         stmt = self._filtered(
             user_id=user_id,
             status=status,
             service_id=service_id,
             roots_only=roots_only,
+            project_id=project_id,
         ).subquery()
         result = await self.session.execute(select(func.count()).select_from(stmt))
         return int(result.scalar_one())
