@@ -19,6 +19,12 @@ class GlinerEntity(BaseModel):
     category: str = Field(
         ..., min_length=1, max_length=32, description="Grouping (PII, POLICE, ...)."
     )
+    description: str | None = Field(
+        default=None,
+        max_length=500,
+        description="What the entity is, in plain words: sent to the model to "
+        "improve accuracy.",
+    )
     severity: Severity = "medium"
     action: Action = "redact"
     enabled: bool = True

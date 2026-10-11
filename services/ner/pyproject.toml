@@ -1,12 +1,15 @@
 [project]
-name = "lisa-service-gliner"
-version = "0.1.0"
-description = "LiSA worker service: zero-shot multilingual NER via GLiNER for PII, police, health, legal, and secret entities."
+name = "lisa-service-ner"
+version = "0.5.0"
+description = "LiSA worker service: zero-shot named entity recognition with GLiNER2, spans and boxes included."
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
 dependencies = [
     "celery[redis]>=5.4",
-    "gliner>=0.2",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "redis>=5.0",
+    "gliner2[local]>=2.1",
     "lisa-worker",
 ]
 

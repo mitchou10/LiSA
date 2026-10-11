@@ -1,6 +1,6 @@
 # Build context must be the repository root (see docker-compose.yml) so that
 # both the worker package and this service can be copied.
-FROM python:3.11-slim AS base
+FROM python:3.12-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy \
     UV_TORCH_BACKEND=cpu
 
-# GLiNER / torch need a compiler for some wheels.
+# torch needs a compiler for some wheels.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential \
     && rm -rf /var/lib/apt/lists/*
@@ -21,10 +21,15 @@ WORKDIR /app
 COPY worker /worker
 RUN uv pip install --system --no-cache /worker
 
-# Install the service (gliner pulls in torch; force CPU-only builds).
-COPY services/gliner/pyproject.toml ./
-COPY services/gliner/README.md ./
-COPY services/gliner/app ./app
+# Install the service (gliner2 pulls in torch; force CPU-only builds).
+COPY services/ner/pyproject.toml ./
+COPY services/ner/README.md ./
+COPY services/ner/app ./app
 RUN uv pip install --system --no-cache --no-sources --torch-backend=cpu .
+
+# Bake the model into the image (needs network at build time).
+ARG NER_MODEL=fastino/gliner2.5-multi-v1
+ENV NER_MODEL=${NER_MODEL}
+RUN python -m app.warmup
 
 CMD ["celery", "-A", "app.celery_app.celery_app", "worker", "--loglevel=info", "--concurrency=1"]

@@ -17,7 +17,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-logger = logging.getLogger("lisa.service.gliner.profile")
+logger = logging.getLogger("lisa.service.ner.profile")
 
 Profile = dict[str, Any]  # {"version", "threshold", "entities": [...]}
 
