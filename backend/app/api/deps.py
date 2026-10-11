@@ -1,12 +1,13 @@
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.keycloak import extract_roles, verify_keycloak_token
+from app.core.oidc import load_session
 from app.core.security import decode_access_token
 from app.database import get_session
 from app.models.enums import UserRole
@@ -66,12 +67,42 @@ _CREDENTIALS_EXC = HTTPException(
 )
 
 
+_SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+
+
+async def _user_from_session_cookie(request: Request) -> CurrentUser | None:
+    """BFF browser session: opaque cookie -> server-side Keycloak session."""
+    session_id = request.cookies.get(settings.session_cookie_name)
+    if not session_id:
+        return None
+    # Cookie-authenticated writes must come from our own frontend (CSRF
+    # defence in depth on top of SameSite); bearer clients are unaffected.
+    if request.method not in _SAFE_METHODS:
+        origin = request.headers.get("origin")
+        if origin is None or origin.rstrip("/") != settings.frontend_url.rstrip("/"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cross-origin request rejected.",
+            )
+    session = await load_session(session_id)
+    if session is None:
+        return None
+    return CurrentUser(
+        id=session.identity["id"],
+        username=session.identity["username"],
+        role=UserRole(session.identity["role"]),
+    )
+
+
 async def _resolve_user(
     creds: HTTPAuthorizationCredentials | None,
     users: UserService,
+    request: Request,
 ) -> CurrentUser | None:
-    """Decode the bearer token (local or Keycloak) into a CurrentUser, if any."""
+    """Resolve the caller from a bearer token (local / Keycloak) or BFF cookie."""
     if creds is None or not creds.credentials:
+        if settings.auth_provider == "keycloak":
+            return await _user_from_session_cookie(request)
         return None
     token = creds.credentials
 
@@ -120,9 +151,11 @@ async def _resolve_user(
     )
 
 
-async def get_current_user(creds: BearerDep, users: UserServiceDep) -> CurrentUser:
+async def get_current_user(
+    request: Request, creds: BearerDep, users: UserServiceDep
+) -> CurrentUser:
     """Require a valid authenticated user."""
-    user = await _resolve_user(creds, users)
+    user = await _resolve_user(creds, users, request)
     if user is None:
         raise _CREDENTIALS_EXC
     return user

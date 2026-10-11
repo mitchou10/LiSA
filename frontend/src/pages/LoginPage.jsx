@@ -11,11 +11,12 @@ import {
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { useAuth } from "../lib/auth.jsx";
+import { oidcLoginUrl } from "../lib/api";
 import { useI18n } from "../lib/i18n.jsx";
 
 export default function LoginPage() {
   const { t } = useI18n();
-  const { signIn } = useAuth();
+  const { signIn, provider } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [username, setUsername] = useState("");
@@ -50,6 +51,17 @@ export default function LoginPage() {
           <CardDescription>{t("auth.subtitle")}</CardDescription>
         </CardHeader>
         <CardContent>
+          {provider === "keycloak" ? (
+            <Button
+              className="w-full"
+              onClick={() => {
+                window.location.href = oidcLoginUrl(from);
+              }}
+            >
+              <LogIn className="h-4 w-4" />
+              {t("auth.submit")}
+            </Button>
+          ) : (
           <form className="space-y-4" onSubmit={handleSubmit}>
             <div className="space-y-1.5">
               <label className="text-sm font-medium" htmlFor="username">
@@ -92,6 +104,7 @@ export default function LoginPage() {
               {loading ? t("auth.signingIn") : t("auth.submit")}
             </Button>
           </form>
+          )}
         </CardContent>
       </Card>
     </div>

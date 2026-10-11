@@ -23,6 +23,8 @@ export function clearToken() {
 async function request(path, options = {}) {
   const token = getToken();
   const res = await fetch(`${API_V1}${path}`, {
+    // BFF mode: the session cookie is the credential (HttpOnly, never read here).
+    credentials: "include",
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -60,6 +62,21 @@ export async function login({ username, password }) {
   });
   setToken(data.access_token);
   return data;
+}
+
+export async function getAuthConfig() {
+  return request("/auth/config");
+}
+
+// Keycloak (BFF): the browser is redirected to the backend, which runs the
+// OIDC flow and sets the session cookie. No token ever reaches JavaScript.
+export function oidcLoginUrl(redirect = "/dashboard") {
+  return `${API_V1}/auth/login?redirect=${encodeURIComponent(redirect)}`;
+}
+
+export async function oidcLogout() {
+  const data = await request("/auth/logout", { method: "POST" });
+  return data.redirectUrl;
 }
 
 export async function getMe() {
