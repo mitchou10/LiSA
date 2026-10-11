@@ -101,6 +101,7 @@ class TaskRepository(BaseRepository[Task]):
         *,
         since: datetime,
         user_id: str | None = None,
+        project_id: UUID | None = None,
     ) -> list[Task]:
         """Return tasks created at/after ``since``, oldest first.
 
@@ -109,6 +110,8 @@ class TaskRepository(BaseRepository[Task]):
         stmt = select(Task).where(Task.created_at >= since)
         if user_id is not None:
             stmt = stmt.where(Task.user_id == user_id)
+        if project_id is not None:
+            stmt = stmt.where(Task.project_id == project_id)
         stmt = stmt.order_by(Task.created_at.asc())
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
