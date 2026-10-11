@@ -73,6 +73,8 @@ async def test_upload_read_delete(client: AsyncClient, fake_storage):
     assert meta["filename"] == "a.txt"
     assert meta["size"] == 5
     assert len(meta["sha256"]) == 64
+    assert meta["s3_key"] == f"uploads/{meta['id']}"
+    assert list(fake_storage) == [meta["s3_key"]]
     assert len(fake_storage) == 1
 
     content = await client.get(f"/api/v1/files/{meta['id']}/content", headers=headers)
