@@ -208,19 +208,40 @@ services:
     networks:
       - lisa
 
-  gliner:
-    image: lisa-service-gliner:v0.4.0
-    container_name: lisa-gliner
+  ner:
+    image: lisa-service-ner:v0.4.0
+    container_name: lisa-ner
     build:
       context: .
-      dockerfile: services/gliner/Dockerfile
+      dockerfile: services/ner/Dockerfile
     environment:
       REDIS_URL: redis://redis:6379/0
       LISA_API_URL: http://server:8000
       LISA_SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-service-token}
-      CELERY_QUEUE: ${GLINER_QUEUE:-gliner-ner}
-      GLINER_MODEL: ${GLINER_MODEL:-gliner-community/gliner_small-v2.5}
-      GLINER_THRESHOLD: ${GLINER_THRESHOLD:-0.5}
+      CELERY_QUEUE: ${NER_QUEUE:-ner}
+      NER_MODEL: ${NER_MODEL:-fastino/gliner2.5-multi-v1}
+      NER_THRESHOLD: ${NER_THRESHOLD:-0.5}
+    depends_on:
+      redis:
+        condition: service_healthy
+      server:
+        condition: service_started
+    networks:
+      - lisa
+
+  relation:
+    image: lisa-service-relation:v0.4.0
+    container_name: lisa-relation
+    build:
+      context: .
+      dockerfile: services/relation/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LISA_API_URL: http://server:8000
+      LISA_SERVICE_TOKEN: ${SERVICE_TOKEN:-change-me-service-token}
+      CELERY_QUEUE: ${RELATION_QUEUE:-relation}
+      RELATION_MODEL: ${RELATION_MODEL:-fastino/gliner2.5-multi-v1}
+      RELATION_THRESHOLD: ${RELATION_THRESHOLD:-0.5}
     depends_on:
       redis:
         condition: service_healthy

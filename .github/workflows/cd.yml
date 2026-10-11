@@ -114,9 +114,12 @@ jobs:
           - name: safety
             context: .
             dockerfile: services/safety/Dockerfile
-          - name: gliner
+          - name: ner
             context: .
-            dockerfile: services/gliner/Dockerfile
+            dockerfile: services/ner/Dockerfile
+          - name: relation
+            context: .
+            dockerfile: services/relation/Dockerfile
           - name: parser
             context: .
             dockerfile: services/parser/Dockerfile
