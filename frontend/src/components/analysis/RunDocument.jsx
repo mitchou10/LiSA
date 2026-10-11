@@ -12,15 +12,20 @@ const HEAD_COLOR = "hsl(215 80% 50%)";
 const TAIL_COLOR = "hsl(285 70% 50%)";
 const pct = (n) => (n == null ? "" : `${Math.round(n * 100)}%`);
 
+// Hide a text: every character but whitespace becomes "*", so lengths and
+// offsets are unchanged and the shape of the text stays recognisable.
+const mask = (text) => text.replace(/\S/g, "*");
+const show = (text, masked) => (masked ? mask(text) : text);
+
 // Every highlight of a page, as one list: what to draw, where, in what colour.
-function highlights(page, layers) {
+function highlights(page, layers, masked) {
   const out = [];
   if (layers.entities)
     for (const e of page.entities)
       out.push({
         id: e.id,
         kind: "entity",
-        title: `${e.label} · ${e.category} · ${e.action} · ${pct(e.score)}`,
+        title: `${show(e.text, masked)} · ${e.label} · ${e.category} · ${e.action} · ${pct(e.score)}`,
         text: e.text,
         label: e.label,
         color: colorFor(e.category),
@@ -39,7 +44,7 @@ function highlights(page, layers) {
           id: `${r.id}-${side}`,
           relationId: r.id,
           kind: "relation",
-          title: `${r.head.text} — ${r.relation} → ${r.tail.text} (${side})`,
+          title: `${show(r.head.text, masked)} — ${r.relation} → ${show(r.tail.text, masked)} (${side})`,
           text: end.text,
           color,
           start: end.start,
@@ -103,7 +108,7 @@ function PageImage({ page, items, activeId, onActive }) {
 }
 
 /** The page text with the spans marked: entities highlighted, relation ends underlined. */
-function PageText({ page, items, activeId, onActive }) {
+function PageText({ page, items, activeId, onActive, masked }) {
   const { t } = useI18n();
   const parts = useMemo(() => segments(page.content, items), [page.content, items]);
   if (!page.content.trim())
@@ -111,7 +116,7 @@ function PageText({ page, items, activeId, onActive }) {
   return (
     <p className="whitespace-pre-wrap rounded-lg border border-border bg-background/40 p-3 text-sm leading-relaxed">
       {parts.map((part) => {
-        if (part.spans.length === 0) return part.text;
+        if (part.spans.length === 0) return show(part.text, masked);
         const entity = part.spans.find((s) => s.kind === "entity");
         const relation = part.spans.find((s) => s.kind === "relation");
         const active = part.spans.some((s) => s.id === activeId);
@@ -132,7 +137,7 @@ function PageText({ page, items, activeId, onActive }) {
               textUnderlineOffset: "3px",
             }}
           >
-            {part.text}
+            {show(part.text, masked)}
           </mark>
         );
       })}
@@ -140,7 +145,7 @@ function PageText({ page, items, activeId, onActive }) {
   );
 }
 
-function Side({ page, activeId, onActive, layers, t }) {
+function Side({ page, activeId, onActive, layers, masked, t }) {
   return (
     <div className="space-y-4">
       {layers.entities && (
@@ -166,7 +171,9 @@ function Side({ page, activeId, onActive, layers, t }) {
                   className="h-2.5 w-2.5 shrink-0 rounded-full"
                   style={{ backgroundColor: colorFor(e.category) }}
                 />
-                <span className="min-w-0 flex-1 truncate font-medium">{e.text}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">
+                  {show(e.text, masked)}
+                </span>
                 <span className="shrink-0 text-xs text-muted-foreground">{e.label}</span>
                 <Badge variant={e.action === "block" ? "destructive" : "muted"}>
                   {t(`sensitive.action.${e.action}`)}
@@ -196,11 +203,11 @@ function Side({ page, activeId, onActive, layers, t }) {
                 )}
               >
                 <span className="font-medium" style={{ color: HEAD_COLOR }}>
-                  {r.head.text}
+                  {show(r.head.text, masked)}
                 </span>
                 <span className="text-xs text-muted-foreground">— {r.relation} →</span>
                 <span className="font-medium" style={{ color: TAIL_COLOR }}>
-                  {r.tail.text}
+                  {show(r.tail.text, masked)}
                 </span>
                 <span className="text-xs text-muted-foreground">{pct(r.score)}</span>
               </li>
@@ -223,6 +230,8 @@ export default function RunDocument({ run, source }) {
   const pages = useMemo(() => buildPages(run, source), [run, source]);
   const [index, setIndex] = useState(0);
   const [layers, setLayers] = useState({ entities: true, relations: true });
+  // The text is hidden by default: what was found shows as coloured stars.
+  const [masked, setMasked] = useState(true);
   const [activeId, setActiveId] = useState(null);
 
   // A new run starts on its first page.
@@ -230,7 +239,10 @@ export default function RunDocument({ run, source }) {
   useEffect(() => setIndex(0), [runId]);
 
   const page = pages[Math.min(index, pages.length - 1)];
-  const items = useMemo(() => (page ? highlights(page, layers) : []), [page, layers]);
+  const items = useMemo(
+    () => (page ? highlights(page, layers, masked) : []),
+    [page, layers, masked]
+  );
   if (!page) return null;
 
   return (
@@ -276,6 +288,14 @@ export default function RunDocument({ run, source }) {
               {t(key)}
             </label>
           ))}
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={masked}
+              onChange={(e) => setMasked(e.target.checked)}
+            />
+            {t("run.doc.mask")}
+          </label>
           {page.filename && <span>· {page.filename}</span>}
         </CardDescription>
       </CardHeader>
@@ -306,9 +326,22 @@ export default function RunDocument({ run, source }) {
             {page.image && (
               <PageImage page={page} items={items} activeId={activeId} onActive={setActiveId} />
             )}
-            <PageText page={page} items={items} activeId={activeId} onActive={setActiveId} />
+            <PageText
+              page={page}
+              items={items}
+              activeId={activeId}
+              onActive={setActiveId}
+              masked={masked}
+            />
           </div>
-          <Side page={page} activeId={activeId} onActive={setActiveId} layers={layers} t={t} />
+          <Side
+            page={page}
+            activeId={activeId}
+            onActive={setActiveId}
+            layers={layers}
+            masked={masked}
+            t={t}
+          />
         </div>
       </CardContent>
     </Card>

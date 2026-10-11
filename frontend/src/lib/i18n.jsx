@@ -351,6 +351,7 @@ export const translations = {
     "run.doc.title": "Document",
     "run.doc.imageGone": "The page image was deleted from storage.",
     "run.doc.noText": "No text on this page.",
+    "run.doc.mask": "Hide the text (***)",
   },
   fr: {
     "app.subtitle": "Détection de jailbreak & prompt injection — supervision",
@@ -702,6 +703,7 @@ export const translations = {
     "run.doc.title": "Document",
     "run.doc.imageGone": "L'image de la page a été supprimée du stockage.",
     "run.doc.noText": "Aucun texte sur cette page.",
+    "run.doc.mask": "Masquer le texte (***)",
   },
 };
 
