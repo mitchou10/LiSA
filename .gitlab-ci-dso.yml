@@ -97,8 +97,10 @@ docker-build-anonymize:
   extends:
     - .docker-build-common
   variables:
+    # The Dockerfile COPYs from the repo root (worker/ and services/anonymize/),
+    # so the build context must be the repo root, not services/anonymize.
     DOCKERFILE: "services/anonymize/Dockerfile"
-    WORKING_DIR: "services/anonymize"
+    WORKING_DIR: "."
   before_script:
     - |
       SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
@@ -122,8 +124,10 @@ docker-build-safety:
   extends:
     - .docker-build-common
   variables:
+    # The Dockerfile COPYs from the repo root (worker/ and services/safety/),
+    # so the build context must be the repo root, not services/safety.
     DOCKERFILE: "services/safety/Dockerfile"
-    WORKING_DIR: "services/safety"
+    WORKING_DIR: "."
   before_script:
     - |
       SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
@@ -147,8 +151,10 @@ docker-build-ner:
   extends:
     - .docker-build-common
   variables:
+    # The Dockerfile COPYs from the repo root (worker/ and services/ner/),
+    # so the build context must be the repo root, not services/ner.
     DOCKERFILE: "services/ner/Dockerfile"
-    WORKING_DIR: "services/ner"
+    WORKING_DIR: "."
   before_script:
     - |
       SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
@@ -172,8 +178,10 @@ docker-build-relation:
   extends:
     - .docker-build-common
   variables:
+    # The Dockerfile COPYs from the repo root (worker/ and services/relation/),
+    # so the build context must be the repo root, not services/relation.
     DOCKERFILE: "services/relation/Dockerfile"
-    WORKING_DIR: "services/relation"
+    WORKING_DIR: "."
   before_script:
     - |
       SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
@@ -197,8 +205,10 @@ docker-build-classification:
   extends:
     - .docker-build-common
   variables:
+    # The Dockerfile COPYs from the repo root (worker/ and services/classification/),
+    # so the build context must be the repo root, not services/classification.
     DOCKERFILE: "services/classification/Dockerfile"
-    WORKING_DIR: "services/classification"
+    WORKING_DIR: "."
   before_script:
     - |
       SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
@@ -222,8 +232,10 @@ docker-build-image-classification:
   extends:
     - .docker-build-common
   variables:
+    # The Dockerfile COPYs from the repo root (worker/ and services/image-classification/),
+    # so the build context must be the repo root, not services/image-classification.
     DOCKERFILE: "services/image-classification/Dockerfile"
-    WORKING_DIR: "services/image-classification"
+    WORKING_DIR: "."
   before_script:
     - |
       SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
@@ -247,8 +259,10 @@ docker-build-parser:
   extends:
     - .docker-build-common
   variables:
+    # The Dockerfile COPYs from the repo root (worker/ and services/parser/),
+    # so the build context must be the repo root, not services/parser.
     DOCKERFILE: "services/parser/Dockerfile"
-    WORKING_DIR: "services/parser"
+    WORKING_DIR: "."
   before_script:
     - |
       SHORT_SHA=$(echo $CI_COMMIT_SHA | cut -c1-7)
