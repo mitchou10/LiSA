@@ -1,18 +1,1 @@
-{{- if .Values.enabled }}
-{{- if eq .Values.relation.deploymentType "DaemonSet" }}
-apiVersion: apps/v1
-kind: DaemonSet
-metadata:
-  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "relation") }}
-  labels: {{- (include "helper.labels" (dict "root" . "componentName" "relation")) | nindent 4 }}
-spec:
-  revisionHistoryLimit: {{ .Values.relation.revisionHistoryLimit | default 10 }}
-  selector:
-    matchLabels: {{- include "helper.selectorLabels" (dict "root" . "componentName" "relation") | nindent 6 }}
-  {{- with .Values.relation.updateStrategy }}
-  updateStrategy: {{- toYaml . | nindent 4 }}
-  {{- end }}
-  template:
-    {{- include "helper.component.podTemplate" (dict "root" . "name" "relation" "component" .Values.relation) | nindent 4 }}
-{{- end }}
-{{- end }}
+{{- include "helper.component.daemonset" (dict "root" . "name" "relation") }}

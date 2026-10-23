@@ -1,16 +1,1 @@
-{{- if .Values.enabled }}
-{{- if or .Values.parser.envCm .Values.global.envCm -}}
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "parser") }}
-  labels: {{- (include "helper.labels" (dict "root" . "componentName" "parser")) | nindent 4 }}
-data:
-  {{- if .Values.global.envCm -}}
-  {{- include "helper.env" (dict "root" . "data" .Values.global.envCm) | indent 2 }}
-  {{- end -}}
-  {{- if .Values.parser.envCm -}}
-  {{- include "helper.env" (dict "root" . "data" .Values.parser.envCm) | indent 2 }}
-  {{- end -}}
-{{- end -}}
-{{- end }}
+{{- include "helper.component.configmap" (dict "root" . "name" "parser") }}

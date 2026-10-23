@@ -1,16 +1,1 @@
-{{- if .Values.enabled }}
-{{- if or .Values.classification.envCm .Values.global.envCm -}}
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: {{ include "helper.componentFullname" (dict "root" . "componentName" "classification") }}
-  labels: {{- (include "helper.labels" (dict "root" . "componentName" "classification")) | nindent 4 }}
-data:
-  {{- if .Values.global.envCm -}}
-  {{- include "helper.env" (dict "root" . "data" .Values.global.envCm) | indent 2 }}
-  {{- end -}}
-  {{- if .Values.classification.envCm -}}
-  {{- include "helper.env" (dict "root" . "data" .Values.classification.envCm) | indent 2 }}
-  {{- end -}}
-{{- end -}}
-{{- end }}
+{{- include "helper.component.configmap" (dict "root" . "name" "classification") }}

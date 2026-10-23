@@ -5,8 +5,8 @@ Release "{{ .Release.Name }}" has been deployed in namespace "{{ .Release.Namesp
 
 NOTE: `enabled` is false, so this release intentionally contains no resource.
 {{- else }}
-{{- range $componentName := list "backend" "frontend" "anonymize" "safety" "ner" "relation" "classification" "imageClassification" "parser" }}
-{{- $component := index $.Values $componentName }}
+{{- range $componentName := include "helper.componentNames" $ | fromYamlArray }}
+{{- $component := include "helper.component.values" (dict "root" $ "name" $componentName) | fromYaml }}
 {{- $fullname := include "helper.componentFullname" (dict "root" $ "componentName" $componentName) }}
 
 {{ $componentName }}:

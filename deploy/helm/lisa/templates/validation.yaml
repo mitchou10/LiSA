@@ -3,16 +3,11 @@ Values validation only - this template intentionally renders no resource. It exi
 `helper.component.validate` runs on every `helm template`/`helm lint`/`helm install`, including
 for combinations where the workload templates themselves would render nothing (e.g. an unknown
 `deploymentType`, which would otherwise silently produce a release with no workload at all).
-Add one `include` line per component when you add components to this chart.
+Iterates over `helper.componentNames` - add the new component there when you add one to this
+chart, instead of adding an `include` line here.
 */ -}}
 {{- if .Values.enabled }}
-{{- include "helper.component.validate" (dict "name" "backend" "component" .Values.backend) }}
-{{- include "helper.component.validate" (dict "name" "frontend" "component" .Values.frontend) }}
-{{- include "helper.component.validate" (dict "name" "anonymize" "component" .Values.anonymize) }}
-{{- include "helper.component.validate" (dict "name" "safety" "component" .Values.safety) }}
-{{- include "helper.component.validate" (dict "name" "ner" "component" .Values.ner) }}
-{{- include "helper.component.validate" (dict "name" "relation" "component" .Values.relation) }}
-{{- include "helper.component.validate" (dict "name" "classification" "component" .Values.classification) }}
-{{- include "helper.component.validate" (dict "name" "imageClassification" "component" .Values.imageClassification) }}
-{{- include "helper.component.validate" (dict "name" "parser" "component" .Values.parser) }}
+{{- range $name := include "helper.componentNames" . | fromYamlArray }}
+{{- include "helper.component.validate" (dict "name" $name "component" (include "helper.component.values" (dict "root" $ "name" $name) | fromYaml)) }}
+{{- end }}
 {{- end }}
