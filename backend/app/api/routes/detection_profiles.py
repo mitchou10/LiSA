@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import ValidationError
-
+from typing import Annotated
 from app.api.deps import AdminDep, CurrentUserDep, DetectionProfileServiceDep
 from app.schemas.detection_profile import ProfileRead, VersionCreate, VersionRead
 from app.schemas.pagination import Page
@@ -14,7 +14,7 @@ def _version(obj, active: int) -> VersionRead:
     return read
 
 
-@router.get("/{service_key}", response_model=ProfileRead)
+@router.get("/{service_key}")
 async def get_profile(
     service_key: str, service: DetectionProfileServiceDep, _user: CurrentUserDep
 ) -> ProfileRead:
@@ -28,18 +28,18 @@ async def get_profile(
     )
 
 
-@router.get("/{service_key}/versions", response_model=Page[VersionRead])
+@router.get("/{service_key}/versions")
 async def list_versions(
     service_key: str,
     service: DetectionProfileServiceDep,
     _user: CurrentUserDep,
-    limit: int = Query(50, ge=1, le=500),
-    offset: int = Query(0, ge=0),
+    limit: Annotated[int, Query(50, ge=1, le=500)],
+    offset: Annotated[int, Query(0, ge=0)],
 ) -> Page[VersionRead]:
     items, total, active = await service.list_versions(
         service_key, limit=limit, offset=offset
     )
-    return Page(
+    return Page[VersionRead](
         items=[_version(o, active) for o in items],
         total=total,
         limit=limit,
@@ -47,7 +47,7 @@ async def list_versions(
     )
 
 
-@router.get("/{service_key}/versions/{version}", response_model=VersionRead)
+@router.get("/{service_key}/versions/{version}")
 async def get_version(
     service_key: str,
     version: int,
@@ -60,7 +60,6 @@ async def get_version(
 
 @router.post(
     "/{service_key}/versions",
-    response_model=VersionRead,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_version(
@@ -81,7 +80,6 @@ async def create_version(
 
 @router.post(
     "/{service_key}/versions/{version}/activate",
-    response_model=VersionRead,
     status_code=status.HTTP_201_CREATED,
 )
 async def activate_version(
