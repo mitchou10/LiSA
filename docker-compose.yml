@@ -19,7 +19,7 @@ services:
       - lisa
 
   server:
-    image: lisa-server:v0.4.0
+    image: lisa-server
     container_name: lisa-server
     build:
       context: ./backend
@@ -107,7 +107,11 @@ services:
     ports:
       - "8180:8080"
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      test:
+        [
+          "CMD-SHELL",
+          "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3",
+        ]
       interval: 10s
       timeout: 5s
       retries: 30
@@ -171,7 +175,7 @@ services:
       - lisa
 
   anonymize:
-    image: lisa-service-anonymize:v0.4.0
+    image: lisa-service-anonymize
     container_name: lisa-anonymize
     build:
       context: .
@@ -195,7 +199,7 @@ services:
       - lisa
 
   safety:
-    image: lisa-service-safety:v0.4.0
+    image: lisa-service-safety
     container_name: lisa-safety
     build:
       context: .
@@ -215,7 +219,7 @@ services:
       - lisa
 
   ner:
-    image: lisa-service-ner:v0.4.0
+    image: lisa-service-ner
     container_name: lisa-ner
     build:
       context: .
@@ -236,7 +240,7 @@ services:
       - lisa
 
   relation:
-    image: lisa-service-relation:v0.4.0
+    image: lisa-service-relation
     container_name: lisa-relation
     build:
       context: .
@@ -257,7 +261,7 @@ services:
       - lisa
 
   classification:
-    image: lisa-service-classification:v0.4.0
+    image: lisa-service-classification
     container_name: lisa-classification
     build:
       context: .
@@ -278,7 +282,7 @@ services:
       - lisa
 
   image-classification:
-    image: lisa-service-image-classification:v0.4.0
+    image: lisa-service-image-classification
     container_name: lisa-image-classification
     build:
       context: .
@@ -302,7 +306,7 @@ services:
       - lisa
 
   parser:
-    image: lisa-service-parser:v0.4.0
+    image: lisa-service-parser
     container_name: lisa-parser
     build:
       context: .
@@ -328,7 +332,7 @@ services:
       - lisa
 
   frontend:
-    image: lisa-frontend:v0.4.0
+    image: lisa-frontend
     container_name: lisa-frontend
     build:
       context: ./frontend
