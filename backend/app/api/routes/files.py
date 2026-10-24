@@ -19,7 +19,7 @@ def get_file_service(session: SessionDep) -> FileService:
 FileServiceDep = Depends(get_file_service)
 
 
-@router.post("", response_model=FileRead, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile, user: CurrentUserDep, service: FileService = FileServiceDep
 ) -> FileRead:
@@ -39,7 +39,7 @@ async def upload_file(
     return FileRead.model_validate(obj)
 
 
-@router.get("/{file_id}", response_model=FileRead)
+@router.get("/{file_id}")
 async def get_file(
     file_id: UUID, user: CurrentUserDep, service: FileService = FileServiceDep
 ) -> FileRead:
