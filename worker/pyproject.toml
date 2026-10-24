@@ -1,6 +1,6 @@
 [project]
 name = "lisa-worker"
-version = "0.5.0"
+version = "1.0.0"
 description = "Independent worker with HTTP clients that call the LiSA backend routes."
 readme = "README.md"
 requires-python = ">=3.11"
