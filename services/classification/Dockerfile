@@ -1,6 +1,8 @@
+# syntax=docker/dockerfile:1
+
 # Build context must be the repository root (see docker-compose.yml) so that
 # both the worker package and this service can be copied.
-FROM python:3.12-slim AS base
+FROM python:3.12-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -38,9 +40,16 @@ ENV CLASSIFIER_BACKEND=${CLASSIFIER_BACKEND} \
 ENV HF_HOME=/opt/hf
 RUN python -m app.warmup
 
-# Run as an unprivileged user.
+FROM python:3.12-slim AS runtime
+# pip is a build tool: the runtime image never installs anything, and the pip bundled with the base
+# image carries known CVEs. Removed rather than upgraded, so there is nothing left to keep patched.
+RUN python -m pip uninstall -y pip
 RUN useradd --system --uid 10001 --home-dir /app app \
     && mkdir -p /opt/hf && chown -R app:app /app /opt/hf
+COPY --from=builder --chown=app:app /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=builder --chown=app:app /usr/local/bin /usr/local/bin
+COPY --from=builder --chown=app:app /app/app /app/app
+COPY --from=builder --chown=app:app /opt/hf /opt/hf
 USER app
 
 HEALTHCHECK --interval=60s --timeout=20s --start-period=120s --retries=3 \

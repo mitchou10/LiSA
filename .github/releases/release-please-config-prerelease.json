@@ -28,16 +28,6 @@
           "type": "toml",
           "path": "services/anonymize/pyproject.toml",
           "jsonpath": "project.version"
-        },
-        {
-          "type": "yaml",
-          "path": "deploy/helm/lisa/Chart.yaml",
-          "jsonpath": "$.version"
-        },
-        {
-          "type": "yaml",
-          "path": "deploy/helm/lisa/Chart.yaml",
-          "jsonpath": "$.appVersion"
         }
       ],
       "changelog-sections": [

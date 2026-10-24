@@ -1,0 +1,31 @@
+# Trivy config-scan findings accepted as noise rather than fixed, because the underlying
+# condition can't actually be satisfied by chart content - see issue tracking CI/scan noise
+# reduction for the full rationale. Verified locally: `trivy config deploy/helm/` reports these
+# checks and nothing else before this file is applied, and reports zero misconfigurations with it.
+
+misconfigurations:
+  # "Restrict container images to trusted registries" - fires because nothing tells Trivy which
+  # registries (ghcr.io, the cloudpirates OCI registry, docker.io/redis and /postgres) are
+  # trusted. A policy-configuration gap, not a real finding: the chart's own image sources are
+  # unrelated to how the running cluster is configured to trust registries.
+  - id: KSV-0125
+
+  # "Workloads in the default namespace" - a portable Helm chart doesn't hardcode a namespace, so
+  # static analysis without a `--namespace` override can't tell what a real install would use.
+  # Expected noise for any reusable chart.
+  - id: KSV-0110
+
+  # "Root file system is not read-only" on the third-party subcharts (deploy/helm/lisa/charts/*.tgz,
+  # scanned here with their own default values). Upstream ships `readOnlyRootFilesystem: false`
+  # for these three because the containers write to their own filesystem (database files, object
+  # storage, generated settings); our values don't override it. Making them read-only needs a
+  # writable volume per path and a test of each service, so it is accepted for now rather than
+  # fixed here. Scoped to these three files so any other chart, or our own templates, still fail
+  # the CI gate.
+  - id: KSV-0014
+    paths:
+      - deploy/helm/lisa/charts/postgres/templates/statefulset.yaml
+      - deploy/helm/lisa/charts/redis/templates/deployment.yaml
+      - deploy/helm/lisa/charts/rustfs/templates/deployment.yaml
+    statement: Third-party subcharts running with their upstream defaults; see the comment above.
+    expired_at: 2027-01-31
