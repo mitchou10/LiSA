@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { getTask, getTaskChildren, startRun } from "../lib/api";
+import { getTask, getTaskChildren, startDefaultRun, startRun } from "../lib/api";
 
 const POLL_MS = 1500;
 const TERMINAL = ["success", "error", "revoked"];
 
 /**
- * Start a project run and follow it until it ends.
+ * Start a run and follow it until it ends.
  *
  * `steps` come from the backend in execution order; each is merged with the
  * live state of its task (status, progress, output, error). The run is over
  * when its parent task reaches a terminal state.
+ *
+ * With a `projectId`, the run applies what that project looks for; without
+ * one, it applies the default definitions (PII entities, safety checks).
  */
 export function useProjectRun() {
   const [run, setRun] = useState(null); // { id, status, steps: [...] }
@@ -30,7 +33,9 @@ export function useProjectRun() {
     setRunning(true);
     setRun(null);
     try {
-      const started = await startRun(projectId, body);
+      const started = projectId
+        ? await startRun(projectId, body)
+        : await startDefaultRun(body);
       let steps = started.steps.map((s) => ({ ...s, progress: 0 }));
       setRun({ id: started.id, status: started.status, steps });
 

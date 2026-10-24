@@ -5,6 +5,10 @@ const BASE_URL = (
 
 const API_V1 = `${BASE_URL}/api/v1`;
 
+// Dev-only: when the backend runs with a service token and no Keycloak, this
+// value is sent as a Bearer token so the API accepts the calls.
+const DEV_SERVICE_TOKEN = import.meta.env.VITE_DEV_SERVICE_TOKEN || "";
+
 async function request(path, options = {}) {
   const res = await fetch(`${API_V1}${path}`, {
     // BFF mode: the session cookie is the credential (HttpOnly, never read here).
@@ -12,6 +16,7 @@ async function request(path, options = {}) {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(DEV_SERVICE_TOKEN ? { Authorization: `Bearer ${DEV_SERVICE_TOKEN}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -254,6 +259,11 @@ export async function uploadFile(file) {
 //         classification_ids?, safety_ids? }
 export const startRun = (projectId, body) =>
   request(`/projects/${projectId}/runs`, json("POST", body));
+
+// Start a default run: the same analysis without any project. The seeded
+// defaults (PII entities, safety checks) are applied, nothing to select.
+export const startDefaultRun = (body) =>
+  request("/tasks/runs", json("POST", body));
 
 // The screenshot of a page parsed by a parser task, as a blob URL (the caller
 // revokes it). 410 means the image was deleted from storage.

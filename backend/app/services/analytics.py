@@ -129,11 +129,11 @@ def _seconds(task: Task) -> float | None:
 
 
 def _is_run(task: Task) -> bool:
-    """The parent task of a project run."""
+    """The parent task of a run: a project run or a default run."""
     return (
         task.parent_task_id is None
         and isinstance(task.input_data, dict)
-        and task.input_data.get("kind") == "project_run"
+        and task.input_data.get("kind") in ("project_run", "default_run")
     )
 
 

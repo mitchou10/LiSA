@@ -3,11 +3,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from app.api.deps import AdminDep, CurrentUserDep, TaskServiceDep
+from app.api.deps import AdminDep, CurrentUserDep, SessionDep, TaskServiceDep
 from app.core import storage
 from app.models.enums import TaskStatus
 from app.schemas.pagination import Page
+from app.schemas.run import DefaultRunCreate, RunRead
 from app.schemas.task import TaskRead, TaskStatusRead, TaskSubmit, TaskUpdate
+from app.services.run import RunService
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -19,6 +21,18 @@ async def submit_task(
     """Submit a new task for execution. Requires authentication."""
     obj = await service.submit(payload)
     return TaskRead.model_validate(obj)
+
+
+@router.post("/runs", response_model=RunRead, status_code=status.HTTP_201_CREATED)
+async def start_default_run(
+    payload: DefaultRunCreate, session: SessionDep, user: CurrentUserDep
+) -> RunRead:
+    """Analyse a text or files with the default definitions, no project.
+
+    Applies the same defaults every new project is seeded with: the PII
+    entities (ner) and the safety checks. Returns the run like a project run.
+    """
+    return await RunService(session).start_default(user, payload)
 
 
 @router.get("", response_model=Page[TaskRead])
