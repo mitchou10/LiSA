@@ -101,13 +101,19 @@ backend:
   - secretRef:
       name: "lisa-db-infos"
   # Plain (non-secret) app config - see backend/app/config.py for the full settings contract.
+  # URLs are computed from the ingress host to avoid duplication - the backend builds
+  # redirect_uri, OIDC endpoints, etc. from these two values.
   env:
-    KEYCLOAK_REALM: "lisa"
-    KEYCLOAK_CLIENT_ID: "lisa-frontend"
-    KEYCLOAK_ADMIN_ROLE: "admin"
+    # Computed from global.ingress.hosts[0].name at deploy time via Helm template.
+    # Backend uses these to build redirect_uri (/api/v1/auth/callback) and post-logout redirects.
+    BACKEND_PUBLIC_URL: "https://{{ (index .Values.global.ingress.hosts 0).name }}"
+    FRONTEND_URL: "https://{{ (index .Values.global.ingress.hosts 0).name }}"
+    # All Keycloak config comes from Vault (lisa-keycloak secret) - no duplication here.
     SESSION_COOKIE_SECURE: "true"
-    S3_REGION: "us-east-1"
     LOG_LEVEL: "INFO"
+  # Non-sensitive config that can vary by env (models, regions, thresholds).
+  envCm:
+    S3_REGION: "us-east-1"
 
 # Anonymize service (services/anonymize) - Celery worker on the llm-guard-anonymize queue.
 # Uses llm-guard to detect and redact PII from text before it reaches the LLM.
@@ -133,8 +139,10 @@ anonymize:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    # Internal cluster URL - uses the Service DNS, computed from release name.
+    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
     CELERY_QUEUE: "llm-guard-anonymize"
+  envCm:
     AWS_S3_REGION: "us-east-1"
 
 # Safety service (services/safety) - Celery worker on the safety queue.
@@ -155,7 +163,7 @@ safety:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
     CELERY_QUEUE: "safety"
     SAFETY_MODEL: "fastino/GLiNER2-Guardrails-PII-Multi"
 
@@ -177,7 +185,7 @@ ner:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
     CELERY_QUEUE: "ner"
     NER_MODEL: "fastino/gliner2.5-multi-v1"
     NER_THRESHOLD: "0.5"
@@ -200,7 +208,7 @@ relation:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
     CELERY_QUEUE: "relation"
     RELATION_MODEL: "fastino/gliner2.5-multi-v1"
     RELATION_THRESHOLD: "0.5"
@@ -223,7 +231,7 @@ classification:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
     CELERY_QUEUE: "classification"
     CLASSIFIER_BACKEND: "gliner2"
     CLASSIFIER_MODEL: "fastino/gliner2.5-multi-v1"
@@ -249,8 +257,9 @@ imageClassification:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
     CELERY_QUEUE: "image-classification"
+  envCm:
     IMAGE_MODEL: "openai/clip-vit-base-patch32"
     S3_REGION: "us-east-1"
 
@@ -275,8 +284,9 @@ parser:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
     CELERY_QUEUE: "liteparse-ocr"
+  envCm:
     OCR_LANGUAGE: "eng+fra"
     S3_REGION: "us-east-1"
 
