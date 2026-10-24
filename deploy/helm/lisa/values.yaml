@@ -1390,8 +1390,10 @@ cronjobs: {}
 # -- Map of extra specs to dynamically add to this chart. Each key is a unique, arbitrary name
 # for the object (only used so `-f` values files/overrides can add, override or remove a single
 # entry by key instead of the whole list - lists don't merge across values files in Helm).
+# The default entries below are the basic-auth Secrets the CNPG cluster needs
+# (initdb secret and superuser secret); see the longer comment at the
+# `lisa-db-appuser` entry for why they are strings and not maps.
 # @section -- General
-extraObjects: {}
 # my-configmap:
 #   apiVersion: v1
 #   kind: ConfigMap
