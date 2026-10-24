@@ -31,7 +31,7 @@ FROM python:3.11-slim AS runtime
 # pip is a build tool: the runtime image never installs anything, and the pip bundled with the base
 # image carries known CVEs. Removed rather than upgraded, so there is nothing left to keep patched.
 RUN python -m pip uninstall -y pip
-RUN useradd --system --uid 10001 --home-dir /app app \
+RUN useradd --system --create-home --uid 10001 --home-dir /app app \
     && mkdir -p /opt/hf && chown -R app:app /app /opt/hf
 COPY --from=builder --chown=app:app /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder --chown=app:app /usr/local/bin /usr/local/bin
