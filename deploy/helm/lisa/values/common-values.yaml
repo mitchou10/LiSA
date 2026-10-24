@@ -441,9 +441,6 @@ redis:
       cpu: "1"
       memory: "1Gi"
 
-postgres:
-  enabled: false
-
 # A known external S3 (s3.fr-par.scw.cloud, same one used for cnpg backups) is used instead -
 # no need to self-host object storage.
 rustfs:
@@ -475,9 +472,18 @@ cnpg:
     monitoring:
       enabled: true
   backups:
+    # Required by the cluster chart: without it the whole `backups` block below
+    # is silently dropped from the rendered Cluster (no barmanObjectStore at all).
+    enabled: true
     method: "barmanObjectStore"
     endpointURL: "https://s3.fr-par.scw.cloud"
     provider: "s3"
+    s3:
+      # Bucket the barman backups are stored in. Required by the cluster chart
+      # when `destinationPath` is not set - without it rendering fails with
+      # "You need to specify S3 bucket if destinationPath is not specified".
+      bucket: "lisa-db-backups"
+      path: "/"
     data:
       compression: "gzip"
       encryption: ""
