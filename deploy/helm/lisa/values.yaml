@@ -224,6 +224,12 @@ gateway:
 secrets:
   serviceToken: "change-me-service-token"
   keycloakClientSecret: "change-me-keycloak-secret"
+  # Credentials of the `lisa` database owner created by the bundled CNPG cluster
+  # (`cnpg.cluster.initdb` below). Rendered into the basic-auth secrets the
+  # CNPG operator requires (see `extraObjects` below) and into the backend's
+  # DATABASE_URL. For local testing only.
+  postgresUsername: "lisa"
+  postgresPassword: "change-me-postgres"
 # -- S3 bucket the files, screenshots and blurred images are stored in (on the bundled RustFS).
 # @section -- General
 s3:
@@ -1038,7 +1044,7 @@ backend:
     runAsUser: 1000
     runAsGroup: 1000
   envCm:
-    DATABASE_URL: "postgresql+asyncpg://{{ .Values.postgres.auth.username }}:{{ .Values.postgres.auth.password }}@lisa-postgres:5432/{{ .Values.postgres.auth.database }}"
+    DATABASE_URL: "postgresql+asyncpg://{{ .Values.secrets.postgresUsername }}:{{ .Values.secrets.postgresPassword }}@lisa-pg-cluster-rw:5432/{{ .Values.cnpg.cluster.initdb.database }}"
     REDIS_URL: "redis://:{{ .Values.redis.auth.password }}@lisa-redis:6379/0"
     CORS_ORIGINS: "[\"https://lisa.local\"]"
     FRONTEND_URL: "https://lisa.local"
@@ -1422,26 +1428,67 @@ extraObjects: {}
 #         foo/bar: "baz"
 #       name: foo
 #       type: "Opaque"
+# Basic-auth secrets required by the bundled CNPG cluster (dev defaults). The
+# CNPG operator only accepts `kubernetes.io/basic-auth` secrets (username +
+# password keys) for `initdb.secret` and `superuserSecret` - Opaque secrets make
+# the Cluster wait forever. In DSO environments these are provided by Vault
+# instead (see values/common-values.yaml).
+#
+# These entries are strings (not maps) on purpose: when an environment file
+# defines the same key with its own object (e.g. the VaultStaticSecrets in
+# values/common-values.yaml), a string base value is replaced wholesale by the
+# override, whereas a map base would be deep-merged into it and leak `stringData`
+# into the VaultStaticSecret, corrupting it.
+extraObjects:
+  lisa-db-appuser: |
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: lisa-db-appuser
+    type: kubernetes.io/basic-auth
+    stringData:
+      username: "{{ .Values.secrets.postgresUsername }}"
+      password: "{{ .Values.secrets.postgresPassword }}"
+  lisa-db-superuser: |
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: lisa-db-superuser
+    type: kubernetes.io/basic-auth
+    stringData:
+      username: "postgres"
+      password: "{{ .Values.secrets.postgresPassword }}"
 ## Additional services comming from dependencies can be configured below.
-## Ref: https://artifacthub.io/packages/helm/this-is-tobi-helm-charts/cnpg-cluster
-# cnpg:
-#   enabled: false
-#   fullnameOverride: backend-pg-cluster
-#   imageName: ghcr.io/cloudnative-pg/postgresql:17.6
-#   mode: primary
-#   dbName: backend
-#   credentials:
-#     username: backend
-#   pvcSize:
-#     data: 3Gi
-#     wal: 2Gi
-#   resources:
-#     requests:
-#       cpu: 250m
-#       memory: 512Mi
-#     limits:
-#       cpu: 500m
-#       memory: 1Gi
+## Ref: https://artifacthub.io/packages/helm/cloudnative-pg/cluster
+cnpg:
+  enabled: true
+  fullnameOverride: "lisa-pg-cluster"
+  mode: standalone
+  type: postgresql
+  version:
+    postgresql: "17"
+  cluster:
+    imageName: "ghcr.io/cloudnative-pg/postgresql:17.7"
+    instances: 1
+    storage:
+      size: 3Gi
+    walStorage:
+      enabled: true
+      size: 2Gi
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    enableSuperuserAccess: true
+    superuserSecret: "lisa-db-superuser"
+    initdb:
+      database: "lisa"
+      owner: "lisa"
+      secret:
+        name: "lisa-db-appuser"
 
 
 # Bundled stateful services (subcharts). Disable each one and point the components at managed
@@ -1453,13 +1500,6 @@ redis:
   auth:
     enabled: true
     password: "change-me-redis"
-postgres:
-  enabled: true
-  fullnameOverride: "lisa-postgres"
-  auth:
-    username: "lisa"
-    password: "change-me-postgres"
-    database: "lisa"
 rustfs:
   enabled: true
   fullnameOverride: "lisa-rustfs"
