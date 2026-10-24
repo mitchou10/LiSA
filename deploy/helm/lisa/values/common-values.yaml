@@ -646,6 +646,34 @@ extraObjects:
   # Per-env overrides (minReplicaCount, maxReplicaCount, pollingInterval, listLength) live
   # in `values-<env>.yaml` under `extraObjects.<name>.spec`.
 
+  # NetworkPolicy: allows the KEDA operator (namespace `keda-system`) to reach the Redis pods
+  # on port 6379. Without this, a default-deny namespace policy (common on DSO/managed
+  # platforms) silently drops the KEDA scaler's TCP SYN, producing:
+  #   "failed to ensure HPA ... dial tcp <redis-ip>:6379: i/o timeout"
+  # The DNS resolves (the Service IP is returned) but the connection never completes.
+  # KEDA runs in its own namespace, so a namespaceSelector on `kubernetes.io/metadata.name:
+  # keda-system` is the most robust match (works regardless of pod labels in keda-system).
+  lisa-redis-keda-netpol:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: lisa-redis-allow-keda
+    spec:
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: redis
+          app.kubernetes.io/instance: lisa-redis
+      policyTypes:
+      - Ingress
+      ingress:
+      - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: keda-system
+        ports:
+        - protocol: TCP
+          port: 6379
+
   # TriggerAuthentication: shared by all the worker ScaledObjects.
   lisa-keda-triggerauth:
     apiVersion: keda.sh/v1alpha1
