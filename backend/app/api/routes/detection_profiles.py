@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import ValidationError
-from typing import Annotated
+
 from app.api.deps import AdminDep, CurrentUserDep, DetectionProfileServiceDep
 from app.schemas.detection_profile import ProfileRead, VersionCreate, VersionRead
 from app.schemas.pagination import Page
@@ -33,8 +33,8 @@ async def list_versions(
     service_key: str,
     service: DetectionProfileServiceDep,
     _user: CurrentUserDep,
-    limit: Annotated[int, Query(50, ge=1, le=500)],
-    offset: Annotated[int, Query(0, ge=0)],
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
 ) -> Page[VersionRead]:
     items, total, active = await service.list_versions(
         service_key, limit=limit, offset=offset
