@@ -4,6 +4,7 @@ import {
   Languages,
   LogIn,
   FolderKanban,
+  ClipboardList,
 } from "lucide-react";
 import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { cn } from "./lib/utils";
@@ -20,10 +21,12 @@ import SensitiveDataPage from "./pages/SensitiveDataPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ProjectPage from "./pages/ProjectPage";
 import LoginPage from "./pages/LoginPage";
+import MyTasksPage from "./pages/MyTasksPage";
 
 const NAV = [
   { to: "/analysis", labelKey: "nav.analyze", icon: ScanSearch },
   { to: "/projects", labelKey: "nav.projects", icon: FolderKanban },
+  { to: "/my-tasks", labelKey: "nav.myTasks", icon: ClipboardList },
 ];
 
 export default function App() {
@@ -153,6 +156,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <SensitiveDataPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/my-tasks"
+            element={
+              <ProtectedRoute>
+                <MyTasksPage />
               </ProtectedRoute>
             }
           />
