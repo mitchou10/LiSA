@@ -45,6 +45,14 @@ class RunCreate(BaseModel):
         return self
 
 
+class DefaultRunCreate(RunCreate):
+    """What a default run analyses: a text or files, nothing to select.
+
+    The same defaults every new project is seeded with are applied: the PII
+    entities (ner) and the safety checks. The selection fields are ignored.
+    """
+
+
 class RunStep(BaseModel):
     """One task of the run, in execution order."""
 
@@ -62,6 +70,7 @@ class RunRead(BaseModel):
     """The run is a parent task: poll it (and its children) with /tasks."""
 
     id: UUID
-    project_id: UUID
+    # None for a default run: it belongs to no project.
+    project_id: UUID | None
     status: TaskStatus
     steps: list[RunStep]

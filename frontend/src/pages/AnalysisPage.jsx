@@ -116,20 +116,19 @@ export default function AnalysisPage() {
 
   useEffect(() => {
     getProjects()
-      .then((list) => {
-        setProjects(list);
-        // Open on the first project when none is chosen.
-        if (list.length && !list.some((p) => p.id === params.get("project"))) {
-          setParams({ project: list[0].id }, { replace: true });
-        }
-      })
+      .then((list) => setProjects(list))
       .catch((err) => setProjectsError(err.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // The project's definitions; everything enabled is applied by default.
+  // Without a project, the run applies the default definitions instead.
   useEffect(() => {
-    if (!projectId) return undefined;
+    if (!projectId) {
+      setDefinitions(null);
+      reset();
+      return undefined;
+    }
     let active = true;
     setDefinitions(null);
     reset();
@@ -160,14 +159,18 @@ export default function AnalysisPage() {
   );
   const hasInput = source === "text" ? text.trim().length > 0 : files.length > 0;
   const busy = running || uploading;
-  const canRun = projectId && definitions && selectedCount > 0 && hasInput && !busy;
+  // Without a project, the default definitions are always applied.
+  const canRun =
+    hasInput && !busy && (projectId ? definitions && selectedCount > 0 : true);
 
   const onRun = async () => {
     setFormError(null);
     try {
-      const body = Object.fromEntries(
-        DEFINITION_KINDS.map((k) => [BODY_FIELD[k], [...selected[k]]])
-      );
+      const body = projectId
+        ? Object.fromEntries(
+            DEFINITION_KINDS.map((k) => [BODY_FIELD[k], [...selected[k]]])
+          )
+        : {}; // a default run applies everything it has
       body.anonymize = anonymize;
       if (source === "text") {
         body.text = text;
@@ -192,20 +195,6 @@ export default function AnalysisPage() {
   if (projectsError && !projects)
     return <p className="text-sm text-destructive">{projectsError}</p>;
   if (!projects) return <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />;
-  if (projects.length === 0)
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("run.noProject.title")}</CardTitle>
-          <CardDescription>{t("run.noProject.desc")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Link to="/projects">
-            <Button>{t("run.noProject.cta")}</Button>
-          </Link>
-        </CardContent>
-      </Card>
-    );
 
   return (
     <div className="space-y-6">
@@ -225,26 +214,34 @@ export default function AnalysisPage() {
                 id="project"
                 className={selectClass}
                 value={projectId}
-                onChange={(e) => setParams({ project: e.target.value })}
+                onChange={(e) =>
+                  setParams(e.target.value ? { project: e.target.value } : {})
+                }
               >
+                <option value="">{t("run.default")}</option>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
                 ))}
               </select>
-              <Link
-                to={`/projects/${projectId}`}
-                className="shrink-0 text-sm text-primary hover:underline"
-              >
-                {t("run.manage")}
-              </Link>
+              {projectId && (
+                <Link
+                  to={`/projects/${projectId}`}
+                  className="shrink-0 text-sm text-primary hover:underline"
+                >
+                  {t("run.manage")}
+                </Link>
+              )}
             </div>
+            {!projectId && (
+              <p className="text-xs text-muted-foreground">{t("run.default.hint")}</p>
+            )}
           </div>
 
-          {!definitions ? (
+          {projectId && !definitions ? (
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : (
+          ) : projectId ? (
             <div className="space-y-4 rounded-lg border border-border p-3">
               <div className="text-sm font-medium">{t("run.apply")}</div>
               {DEFINITION_KINDS.map((kind) => (
@@ -258,6 +255,11 @@ export default function AnalysisPage() {
                   t={t}
                 />
               ))}
+            </div>
+          ) : (
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <div className="text-sm font-medium">{t("run.apply")}</div>
+              <p className="text-xs text-muted-foreground">{t("run.default.applies")}</p>
             </div>
           )}
 
