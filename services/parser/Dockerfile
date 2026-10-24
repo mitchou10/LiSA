@@ -40,7 +40,8 @@ RUN useradd --system --create-home --uid 10001 --home-dir /app app \
 COPY --from=builder --chown=app:app /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder --chown=app:app /usr/local/bin /usr/local/bin
 COPY --from=builder --chown=app:app /app/app /app/app
-COPY --from=builder --chown=app:app /opt/hf /opt/hf
+# Tesseract traineddata is downloaded by warmup to /root/.tesseract-rs, not /opt/hf.
+COPY --from=builder --chown=app:app /root/.tesseract-rs /root/.tesseract-rs
 USER app
 
 HEALTHCHECK --interval=60s --timeout=20s --start-period=120s --retries=3 \
