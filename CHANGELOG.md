@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.1](https://github.com/mitchou10/LiSA/compare/v1.0.0...v1.0.1) (2026-10-24)
+
+
+### Bug Fixes
+
+* add NetworkPolicy to allow KEDA to reach Redis ([e3e3334](https://github.com/mitchou10/LiSA/commit/e3e3334281b5d2caded64b7e266288b18d6f9947))
+* **helm:** remove duplicate extraObjects key in values.yaml ([59b241e](https://github.com/mitchou10/LiSA/commit/59b241e29e22e3f8bed9eeef640f45c38fe6836c))
+* replace postgres dependency with CNPG cluster chart ([c180114](https://github.com/mitchou10/LiSA/commit/c1801140606fec350135bf88c1f69a286323f7d8))
+
 ## [1.0.0](https://github.com/mitchou10/LiSA/compare/v0.5.0...v1.0.0) (2026-10-24)
 
 
