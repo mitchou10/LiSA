@@ -7,7 +7,7 @@ from app.schemas.health import HealthRead
 router = APIRouter(tags=["health"])
 
 
-@router.get("/health", response_model=HealthRead)
+@router.get("/health")
 async def health(session: SessionDep) -> HealthRead:
     """Liveness/readiness probe including a database round-trip."""
     db_status = "ok"

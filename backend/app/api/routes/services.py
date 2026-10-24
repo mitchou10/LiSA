@@ -11,7 +11,7 @@ from app.schemas.service import ServiceCreate, ServiceRead, ServiceUpdate
 router = APIRouter(prefix="/services", tags=["services"])
 
 
-@router.post("", response_model=ServiceRead, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_service(
     payload: ServiceCreate, service: ServiceServiceDep, _admin: AdminDep
 ) -> ServiceRead:
@@ -19,7 +19,7 @@ async def create_service(
     return ServiceRead.model_validate(obj)
 
 
-@router.get("", response_model=Page[ServiceRead])
+@router.get("")
 async def list_services(
     service: ServiceServiceDep,
     _user: CurrentUserDep,
@@ -31,7 +31,7 @@ async def list_services(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Page[ServiceRead]:
     items, total = await service.list_page(q=q, type_=type, limit=limit, offset=offset)
-    return Page(
+    return Page[ServiceRead](
         items=[ServiceRead.model_validate(o) for o in items],
         total=total,
         limit=limit,
@@ -39,7 +39,7 @@ async def list_services(
     )
 
 
-@router.get("/{service_id}", response_model=ServiceRead)
+@router.get("/{service_id}")
 async def get_service(
     service_id: UUID, service: ServiceServiceDep, _user: CurrentUserDep
 ) -> ServiceRead:
@@ -47,7 +47,7 @@ async def get_service(
     return ServiceRead.model_validate(obj)
 
 
-@router.patch("/{service_id}", response_model=ServiceRead)
+@router.patch("/{service_id}")
 async def update_service(
     service_id: UUID,
     payload: ServiceUpdate,
