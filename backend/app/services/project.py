@@ -89,9 +89,7 @@ class ProjectService:
         # are plain catalog rows: edit or delete them like any other
         # definition.
         for payload in default_pii_entities():
-            project.entities.append(
-                EntityDefinition(created_by=user.id, **payload)
-            )
+            project.entities.append(EntityDefinition(created_by=user.id, **payload))
         for payload in default_safety_checks():
             project.safety_checks.append(
                 SafetyDefinition(

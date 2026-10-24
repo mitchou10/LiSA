@@ -244,7 +244,11 @@ class RunService:
                 # What was applied: definition ids, or names for a default run.
                 "selected": {
                     k: [
-                        str(d.id) if hasattr(d, "id") else getattr(d, KINDS[k].name_field)
+                        (
+                            str(d.id)
+                            if hasattr(d, "id")
+                            else getattr(d, KINDS[k].name_field)
+                        )
                         for d in v
                     ]
                     for k, v in selected.items()

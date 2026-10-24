@@ -57,7 +57,9 @@ def by_service(sent):
 async def test_a_text_is_analysed_with_the_defaults(
     client, admin_headers, registered, sent
 ):
-    resp = await client.post(R, json={"text": "Tim Cook pays FR76."}, headers=admin_headers)
+    resp = await client.post(
+        R, json={"text": "Tim Cook pays FR76."}, headers=admin_headers
+    )
     assert resp.status_code == 201, resp.text
     body = resp.json()
     assert [s["step"] for s in body["steps"]] == ["ner", "safety"]
@@ -99,9 +101,7 @@ async def test_the_safety_step_gets_the_default_checks(
     safety = by_service(sent)["safety"][2]
     assert safety["pii_labels"] == []  # PII is the ner step's job
     checks = safety["safety_tasks"]
-    assert [c["name"] for c in checks] == [
-        c["name"] for c in default_safety_checks()
-    ]
+    assert [c["name"] for c in checks] == [c["name"] for c in default_safety_checks()]
     jailbreak = next(c for c in checks if c["name"] == "jailbreak_detection")
     assert jailbreak["multi_label"] is True
     assert "prompt_injection" in jailbreak["labels"][0]["name"]
@@ -120,9 +120,9 @@ async def test_selection_fields_are_ignored(client, admin_headers, registered, s
 
 # -- the run is a task like any other ----------------------------------------------------
 async def test_the_run_belongs_to_no_project(client, admin_headers, registered, sent):
-    run_id = (
-        await client.post(R, json={"text": "x"}, headers=admin_headers)
-    ).json()["id"]
+    run_id = (await client.post(R, json={"text": "x"}, headers=admin_headers)).json()[
+        "id"
+    ]
     parent = (await client.get(f"/api/v1/tasks/{run_id}", headers=admin_headers)).json()
     assert parent["project_id"] is None
     assert parent["input_data"]["kind"] == "default_run"
@@ -152,7 +152,9 @@ async def test_a_missing_worker_refuses_the_whole_run(
     ] == 0
 
 
-@pytest.mark.parametrize("body", [{}, {"text": "  "}, {"text": "x", "file_ids": [str(io.IOBase())]}])
+@pytest.mark.parametrize(
+    "body", [{}, {"text": "  "}, {"text": "x", "file_ids": [str(io.IOBase())]}]
+)
 async def test_one_source_is_required(client, admin_headers, registered, body):
     assert (await client.post(R, json=body, headers=admin_headers)).status_code == 422
 
@@ -171,7 +173,9 @@ async def upload(client, headers, name="a.pdf"):
 async def test_files_go_to_the_parser_first(client, admin_headers, registered, sent):
     file = await upload(client, admin_headers)
     resp = await client.post(
-        R, json={"file_ids": [file["id"]], "blur_screenshots": False}, headers=admin_headers
+        R,
+        json={"file_ids": [file["id"]], "blur_screenshots": False},
+        headers=admin_headers,
     )
     assert resp.status_code == 201, resp.text
     steps = resp.json()["steps"]
@@ -225,7 +229,9 @@ async def test_anonymize_waits_for_the_entities(
     client, admin_headers, registered, sent
 ):
     resp = await client.post(
-        R, json={"text": "Maria Garcia lives in Paris", "anonymize": True}, headers=admin_headers
+        R,
+        json={"text": "Maria Garcia lives in Paris", "anonymize": True},
+        headers=admin_headers,
     )
     assert resp.status_code == 201, resp.text
     steps = resp.json()["steps"]
