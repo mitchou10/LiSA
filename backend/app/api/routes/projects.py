@@ -46,14 +46,14 @@ CatalogServiceDep = Annotated[CatalogService, Depends(get_catalog_service)]
 
 
 # -- projects ---------------------------------------------------------------------
-@router.post("", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def create_project(
     payload: ProjectCreate, service: ProjectServiceDep, user: CurrentUserDep
 ) -> ProjectRead:
     return ProjectRead.model_validate(await service.create(user, payload))
 
 
-@router.get("", response_model=Page[ProjectSummary])
+@router.get("")
 async def list_projects(
     service: ProjectServiceDep,
     user: CurrentUserDep,
@@ -65,14 +65,14 @@ async def list_projects(
     return Page(items=items, total=total, limit=limit, offset=offset)
 
 
-@router.get("/{project_id}", response_model=ProjectRead)
+@router.get("/{project_id}")
 async def get_project(
     project_id: UUID, service: ProjectServiceDep, user: CurrentUserDep
 ) -> ProjectRead:
     return ProjectRead.model_validate(await service.get(project_id, user))
 
 
-@router.patch("/{project_id}", response_model=ProjectRead)
+@router.patch("/{project_id}")
 async def update_project(
     project_id: UUID,
     payload: ProjectUpdate,
@@ -91,9 +91,7 @@ async def delete_project(
 
 
 # -- runs -------------------------------------------------------------------------------
-@router.post(
-    "/{project_id}/runs", response_model=RunRead, status_code=status.HTTP_201_CREATED
-)
+@router.post("/{project_id}/runs", status_code=status.HTTP_201_CREATED)
 async def start_run(
     project_id: UUID, payload: RunCreate, session: SessionDep, user: CurrentUserDep
 ) -> RunRead:
