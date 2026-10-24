@@ -238,6 +238,9 @@ export async function uploadFile(file) {
   const res = await fetch(`${API_V1}/files`, {
     method: "POST",
     credentials: "include",
+    headers: {
+      ...(DEV_SERVICE_TOKEN ? { Authorization: `Bearer ${DEV_SERVICE_TOKEN}` } : {}),
+    },
     body, // the browser sets the multipart Content-Type itself
   });
   if (!res.ok) {
@@ -270,10 +273,43 @@ export const startDefaultRun = (body) =>
 export async function fetchPageImage(parserTaskId, pageNumber) {
   const res = await fetch(
     `${API_V1}/tasks/${parserTaskId}/pages/${pageNumber}/image`,
-    { credentials: "include" }
+    {
+      credentials: "include",
+      headers: {
+        ...(DEV_SERVICE_TOKEN ? { Authorization: `Bearer ${DEV_SERVICE_TOKEN}` } : {}),
+      },
+    }
   );
   if (!res.ok) {
     const error = new Error(`${res.status} ${res.statusText}`);
+    error.status = res.status;
+    throw error;
+  }
+  return URL.createObjectURL(await res.blob());
+}
+
+// Export the pages of a finished file run: blurred entities, boxes, labels,
+// as PNG (one page), ZIP or PDF (every page). Returns a blob URL the caller
+// revokes after the download.
+export async function renderRunDocument(runId, body) {
+  const res = await fetch(`${API_V1}/tasks/${runId}/render`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(DEV_SERVICE_TOKEN ? { Authorization: `Bearer ${DEV_SERVICE_TOKEN}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const payload = await res.json();
+      if (payload?.detail) detail = payload.detail;
+    } catch {
+      /* ignore non-JSON error bodies */
+    }
+    const error = new Error(detail);
     error.status = res.status;
     throw error;
   }

@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ChevronLeft, ChevronRight, ImageOff, Loader2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  FileImage,
+  FileText,
+  ImageOff,
+  Loader2,
+} from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { usePageImage } from "../../hooks/usePageImage";
+import { renderRunDocument } from "../../lib/api";
 import { buildPages, colorFor, isAnonymizing, segments } from "../../lib/runModel";
 import { cn } from "../../lib/utils";
 import { useI18n } from "../../lib/i18n.jsx";
@@ -172,7 +182,7 @@ function PageText({ page, items, activeId, onActive, masked }) {
   );
 }
 
-function Side({ page, activeId, onActive, layers, masked, t }) {
+function Side({ page, activeId, onActive, layers, masked, selected, onToggle, t }) {
   return (
     <div className="space-y-4">
       {layers.entities && (
@@ -194,6 +204,13 @@ function Side({ page, activeId, onActive, layers, masked, t }) {
                   activeId === e.id && "border-border bg-muted"
                 )}
               >
+                <input
+                  type="checkbox"
+                  className="shrink-0"
+                  checked={selected.has(`${page.number}:${e.id}`)}
+                  onChange={() => onToggle(`${page.number}:${e.id}`)}
+                  title={t("run.doc.selectEntity")}
+                />
                 <span
                   className="h-2.5 w-2.5 shrink-0 rounded-full"
                   style={{ backgroundColor: colorFor(e.category) }}
@@ -255,6 +272,95 @@ function Side({ page, activeId, onActive, layers, masked, t }) {
 }
 
 /**
+ * The export bar: pick what to blur, which entities, and download the pages
+ * as PNG (the current page), ZIP or PDF (every page). Only shown for runs
+ * whose pages have screenshots.
+ */
+function ExportPanel({ run, page, pages, selected, onToggle, t }) {
+  const [blur, setBlur] = useState("entities");
+  const [boxes, setBoxes] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  const entityCount = pages.reduce((n, p) => n + p.entities.length, 0);
+  const selectedCount = selected.size;
+
+  async function download(format) {
+    setBusy(true);
+    setError(null);
+    try {
+      const body = { format, blur, boxes };
+      if (format === "png") body.page_numbers = [page.number];
+      if (selectedCount > 0 && selectedCount < entityCount)
+        body.entity_ids = [...selected];
+      const url = await renderRunDocument(run.id, body);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-background/40 px-3 py-2 text-sm">
+      <span className="font-medium">{t("run.doc.export")}</span>
+      <label className="flex items-center gap-1.5">
+        {t("run.doc.blur")}
+        <select
+          value={blur}
+          onChange={(e) => setBlur(e.target.value)}
+          className="rounded-md border border-border bg-background px-1.5 py-0.5"
+        >
+          <option value="entities">{t("run.doc.blur.entities")}</option>
+          <option value="full">{t("run.doc.blur.full")}</option>
+          <option value="none">{t("run.doc.blur.none")}</option>
+        </select>
+      </label>
+      <label className="flex items-center gap-1.5">
+        <input
+          type="checkbox"
+          checked={boxes}
+          onChange={(e) => setBoxes(e.target.checked)}
+        />
+        {t("run.doc.boxes")}
+      </label>
+      <span className="text-xs text-muted-foreground">
+        {selectedCount > 0
+          ? t("run.doc.selected").replace("{n}", selectedCount)
+          : t("run.doc.allEntities")}
+      </span>
+      <div className="ml-auto flex items-center gap-2">
+        {busy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+        {error && (
+          <span className="max-w-48 truncate text-xs text-destructive" title={error}>
+            {error}
+          </span>
+        )}
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => download("png")}>
+          <FileImage className="h-4 w-4" />
+          {t("run.doc.png")}
+        </Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => download("zip")}>
+          <Download className="h-4 w-4" />
+          {t("run.doc.zip")}
+        </Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={() => download("pdf")}>
+          <FileText className="h-4 w-4" />
+          {t("run.doc.pdf")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
  * The analysed document, page by page: the screenshot with the boxes of what
  * was found (files), the text with the spans marked, the safety verdict and
  * the classification of the page. Hovering a highlight, in the image, the text
@@ -271,10 +377,24 @@ export default function RunDocument({ run, source }) {
   const [maskedByUser, setMasked] = useState(false);
   const masked = anonymizing || maskedByUser;
   const [activeId, setActiveId] = useState(null);
+  // The entities to blur on export, as "page:entity" ids (entity ids restart
+  // on every page). Empty means every entity.
+  const [selected, setSelected] = useState(new Set());
 
-  // A new run starts on its first page.
+  // A new run starts on its first page, with nothing selected.
   const runId = run?.id;
-  useEffect(() => setIndex(0), [runId]);
+  useEffect(() => {
+    setIndex(0);
+    setSelected(new Set());
+  }, [runId]);
+
+  const toggleEntity = (id) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const page = pages[Math.min(index, pages.length - 1)];
   const items = useMemo(
@@ -339,6 +459,16 @@ export default function RunDocument({ run, source }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {pages.some((p) => p.image) && (
+          <ExportPanel
+            run={run}
+            page={page}
+            pages={pages}
+            selected={selected}
+            onToggle={toggleEntity}
+            t={t}
+          />
+        )}
         <div className="flex flex-wrap items-center gap-2">
           {page.unsafe && (
             <Badge variant="destructive" className="gap-1">
@@ -405,6 +535,8 @@ export default function RunDocument({ run, source }) {
             onActive={setActiveId}
             layers={layers}
             masked={masked}
+            selected={selected}
+            onToggle={toggleEntity}
             t={t}
           />
         </div>
