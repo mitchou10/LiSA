@@ -6,9 +6,9 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from app.api.deps import AdminDep, CurrentUserDep, SessionDep, TaskServiceDep
 from app.core import storage
 from app.models.enums import TaskStatus
+from app.schemas.auth import CurrentUser
 from app.schemas.pagination import Page
 from app.schemas.render import RenderRequest
-from app.schemas.auth import CurrentUser
 from app.schemas.run import DefaultRunCreate, RunRead
 from app.schemas.task import TaskRead, TaskStatusRead, TaskSubmit, TaskUpdate
 from app.services.render import RenderError, RenderService
