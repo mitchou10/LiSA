@@ -138,6 +138,27 @@ export async function getTasks(params = {}) {
   return Array.isArray(page) ? page : (page?.items ?? []);
 }
 
+// Get tasks for the current authenticated user.
+export async function getMyTasks({
+  status,
+  serviceId,
+  projectId,
+  rootsOnly,
+  limit = 50,
+  offset = 0,
+} = {}) {
+  const query = buildQuery({
+    status,
+    service_id: serviceId,
+    project_id: projectId,
+    roots_only: rootsOnly,
+    limit,
+    offset,
+  });
+  const data = await request(`/tasks/me${query}`);
+  return toPage(data, { limit, offset });
+}
+
 export async function getTaskChildren(taskId) {
   return request(`/tasks/${taskId}/children`);
 }
