@@ -39,9 +39,7 @@ async def project(client: AsyncClient, admin_headers):
         await client.post(P, json={"name": "Contracts"}, headers=admin_headers)
     ).json()
     pid = body["id"]
-    await client.post(
-        f"{P}/{pid}/entities", json={"label": "iban"}, headers=admin_headers
-    )
+    # The seeded PII entities are kept: the ner step has work to do.
     await client.post(
         f"{P}/{pid}/safety",
         json={"name": "jailbreak", "labels": [{"name": "safe", "is_ok": True}, "bad"]},

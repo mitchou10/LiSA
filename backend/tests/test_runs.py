@@ -57,6 +57,13 @@ async def project(client, admin_headers, registered):
     pid = (await client.post(P, json={"name": "Docs"}, headers=admin_headers)).json()[
         "id"
     ]
+    # Drop the definitions seeded at creation: this project adds its own.
+    for kind in ("entities", "safety"):
+        for row in (await client.get(f"{P}/{pid}/{kind}", headers=admin_headers)).json():
+            resp = await client.delete(
+                f"{P}/{pid}/{kind}/{row['id']}", headers=admin_headers
+            )
+            assert resp.status_code == 204, resp.text
 
     async def add(kind, payload):
         resp = await client.post(
@@ -257,6 +264,15 @@ async def test_nothing_to_apply_is_refused(client, admin_headers, registered, se
     empty = (
         await client.post(P, json={"name": "Empty"}, headers=admin_headers)
     ).json()["id"]
+    # The seeded definitions are disabled first: an empty project refuses.
+    for kind in ("entities", "safety"):
+        for row in (await client.get(f"{P}/{empty}/{kind}", headers=admin_headers)).json():
+            resp = await client.patch(
+                f"{P}/{empty}/{kind}/{row['id']}",
+                json={"enabled": False},
+                headers=admin_headers,
+            )
+            assert resp.status_code == 200, resp.text
     resp = await client.post(
         f"{P}/{empty}/runs", json={"text": "x"}, headers=admin_headers
     )

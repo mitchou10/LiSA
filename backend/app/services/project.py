@@ -26,6 +26,7 @@ from app.schemas.project import (
     ProjectUpdate,
 )
 from app.services.exceptions import ConflictError, NotFoundError
+from app.services.project_defaults import default_pii_entities, default_safety_checks
 
 
 @dataclass(frozen=True)
@@ -82,6 +83,26 @@ class ProjectService:
             name=data.name, description=data.description, created_by=user.id
         )
         self.session.add(project)
+        # Every new project starts guarded out of the box: the default safety
+        # checks (prompt safety, jailbreak / prompt injection, toxicity) and the
+        # PII entities (names, emails, phone numbers, IDs, secrets...). They
+        # are plain catalog rows: edit or delete them like any other
+        # definition.
+        for payload in default_pii_entities():
+            project.entities.append(
+                EntityDefinition(created_by=user.id, **payload)
+            )
+        for payload in default_safety_checks():
+            project.safety_checks.append(
+                SafetyDefinition(
+                    created_by=user.id,
+                    **{k: v for k, v in payload.items() if k not in ("labels",)},
+                    labels=[
+                        SafetyLabel(name=lb["name"], is_ok=lb["is_ok"], position=pos)
+                        for pos, lb in enumerate(payload["labels"])
+                    ],
+                )
+            )
         await self.session.commit()
         await self.session.refresh(project)
         return project
