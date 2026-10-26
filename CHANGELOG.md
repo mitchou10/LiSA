@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/mitchou10/LiSA/compare/v1.1.0...v1.2.0) (2026-10-26)
+
+
+### Features
+
+* **frontend:** turn the login page into a product landing page ([946ea46](https://github.com/mitchou10/LiSA/commit/946ea46c6a35214713a3ee1c867d9b4fdb8fe273))
+
 ## [1.1.0](https://github.com/mitchou10/LiSA/compare/v1.0.1...v1.1.0) (2026-10-26)
 
 
