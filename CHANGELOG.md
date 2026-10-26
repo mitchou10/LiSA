@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0](https://github.com/mitchou10/LiSA/compare/v1.2.2...v1.3.0) (2026-10-26)
+
+
+### Features
+
+* **frontend:** say on the landing page that LiSA works offline ([1a393f4](https://github.com/mitchou10/LiSA/commit/1a393f45b2f2d79ea66614570f21f426b3db105b))
+
+
+### Bug Fixes
+
+* **helm:** select the Redis pods in the KEDA NetworkPolicy ([f1528a1](https://github.com/mitchou10/LiSA/commit/f1528a1fae6ae4227f595e45b994c1e0bc640b33))
+* **services:** run the workers offline ([aadca68](https://github.com/mitchou10/LiSA/commit/aadca6836f460bceda48ba1215528928cccb6732))
+
 ## [1.2.2](https://github.com/mitchou10/LiSA/compare/v1.2.1...v1.2.2) (2026-10-26)
 
 
