@@ -9,13 +9,7 @@ const API_V1 = `${BASE_URL}/api/v1`;
 // value is sent as a Bearer token so the API accepts the calls.
 const DEV_SERVICE_TOKEN = import.meta.env.VITE_DEV_SERVICE_TOKEN || "";
 
-// Work on the frontend without a backend: every call below is answered by an
-// in-memory fake (lib/mockBackend.js).
-const MOCKS = ["true", "1"].includes(import.meta.env.VITE_USE_MOCKS);
-const mocks = () => import("./mockBackend.js");
-
 async function request(path, options = {}) {
-  if (MOCKS) return (await mocks()).mockRequest(path, options);
   const res = await fetch(`${API_V1}${path}`, {
     // BFF mode: the session cookie is the credential (HttpOnly, never read here).
     credentials: "include",
@@ -50,7 +44,6 @@ async function request(path, options = {}) {
 }
 
 export async function getHealth() {
-  if (MOCKS) return (await mocks()).mockHealth();
   const res = await fetch(`${BASE_URL}/health`);
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
@@ -261,7 +254,6 @@ export const deleteDefinition = (projectId, kind, id) =>
 
 // Upload a file to object storage; returns its metadata (id, s3_key, ...).
 export async function uploadFile(file) {
-  if (MOCKS) return (await mocks()).mockUpload(file);
   const body = new FormData();
   body.append("file", file);
   const res = await fetch(`${API_V1}/files`, {
@@ -300,7 +292,6 @@ export const startDefaultRun = (body) =>
 // The screenshot of a page parsed by a parser task, as a blob URL (the caller
 // revokes it). 410 means the image was deleted from storage.
 export async function fetchPageImage(parserTaskId, pageNumber) {
-  if (MOCKS) return (await mocks()).mockPageImage(parserTaskId, pageNumber);
   const res = await fetch(
     `${API_V1}/tasks/${parserTaskId}/pages/${pageNumber}/image`,
     {
@@ -322,7 +313,6 @@ export async function fetchPageImage(parserTaskId, pageNumber) {
 // as PNG (one page), ZIP or PDF (every page). Returns a blob URL the caller
 // revokes after the download.
 export async function renderRunDocument(runId, body) {
-  if (MOCKS) return (await mocks()).mockRender(runId, body);
   const res = await fetch(`${API_V1}/tasks/${runId}/render`, {
     method: "POST",
     credentials: "include",
