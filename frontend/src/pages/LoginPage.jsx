@@ -1,13 +1,17 @@
 import { Navigate, useLocation } from "react-router-dom";
 import {
   ArrowRight,
+  Ban,
   Check,
+  Cpu,
+  Database,
   EyeOff,
   FileSearch,
   FileText,
   FolderKanban,
   KeyRound,
   Layers,
+  Lock,
   LogIn,
   Network,
   ScanEye,
@@ -31,6 +35,14 @@ const FEATURES = [
   { key: "safety", icon: ShieldAlert },
   { key: "documents", icon: FileSearch },
   { key: "blur", icon: EyeOff },
+];
+
+// What keeps the data in the system: each point is true of the code, see the i18n texts.
+const PRIVACY = [
+  { key: "nollm", icon: Ban },
+  { key: "models", icon: Cpu },
+  { key: "storage", icon: Database },
+  { key: "anonymize", icon: Lock },
 ];
 
 const STEPS = ["source", "analysis", "run", "results"];
@@ -97,7 +109,7 @@ export default function LoginPage() {
             </a>
           </div>
           <ul className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm text-muted-foreground">
-            {["pdf", "images", "text"].map((k) => (
+            {["pdf", "images", "text", "nollm"].map((k) => (
               <li key={k} className="flex items-center gap-1.5">
                 <Check className="h-4 w-4 text-success" />
                 {t(`landing.formats.${k}`)}
@@ -125,6 +137,31 @@ export default function LoginPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Privacy */}
+      <section className="grid gap-8 rounded-2xl border border-border bg-card p-6 sm:p-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <div className="space-y-3">
+          <span className="inline-flex items-center gap-2 text-sm font-medium text-success">
+            <Lock className="h-4 w-4" />
+            {t("landing.privacy.kicker")}
+          </span>
+          <h3 className="text-3xl font-bold tracking-tight">{t("landing.privacy.title")}</h3>
+          <p className="text-muted-foreground">{t("landing.privacy.desc")}</p>
+        </div>
+        <ul className="grid gap-4 sm:grid-cols-2">
+          {PRIVACY.map(({ key, icon: Icon }) => (
+            <li key={key} className="flex gap-3">
+              <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/15 text-success">
+                <Icon className="h-4 w-4" />
+              </span>
+              <div>
+                <h4 className="text-sm font-semibold">{t(`landing.privacy.${key}`)}</h4>
+                <p className="mt-0.5 text-sm text-muted-foreground">{t(`landing.privacy.${key}.desc`)}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
       </section>
 
       {/* How it works */}

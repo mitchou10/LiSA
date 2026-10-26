@@ -6,7 +6,7 @@ Code : [`frontend/src/pages/AnalysisPage.jsx`](../frontend/src/pages/AnalysisPag
 
 ## Page de connexion
 
-La page de connexion est aussi la page de présentation du produit : ce que fait LiSA (données sensibles, relations, classification, contrôles de sécurité, documents réels, flou et anonymisation), le parcours en quatre étapes, un aperçu des écrans, puis ce qui rassure (authentification unique, règles par projet, historique, déploiement sur votre infrastructure). Le bouton *Se connecter* envoie vers Keycloak ; un utilisateur déjà connecté est renvoyé vers l'application.
+La page de connexion est aussi la page de présentation du produit : ce que fait LiSA (données sensibles, relations, classification, contrôles de sécurité, documents réels, flou et anonymisation), ce qui garantit que les données restent dans le système (aucun appel à un LLM externe, modèles embarqués), le parcours en quatre étapes, un aperçu des écrans, puis ce qui rassure (authentification unique, règles par projet, historique, déploiement sur votre infrastructure). Le bouton *Se connecter* envoie vers Keycloak ; un utilisateur déjà connecté est renvoyé vers l'application.
 
 ![Page de connexion](screenshots/00-page-de-connexion.png)
 
