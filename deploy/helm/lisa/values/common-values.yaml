@@ -441,6 +441,16 @@ redis:
       cpu: "1"
       memory: "1Gi"
 
+# The namespace quota (dso-quota) rejects any pod without requests/limits.
+rustfs:
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
 cnpg:
   enabled: true
   fullnameOverride: "lisa-pg-cluster"
