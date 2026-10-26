@@ -498,6 +498,11 @@ export const translations = {
     "wiz.export.zip.hint": "One image per page",
     "wiz.export.pdf": "PDF",
     "wiz.export.pdf.hint": "All pages in one file",
+    "wiz.source.kind.text": "Text",
+    "wiz.source.kind.files": "Files",
+    "myTasks.source": "Source",
+    "common.refresh": "Refresh",
+    "task.status.all": "All",
   },
   fr: {
     "app.subtitle": "Détection de jailbreak & prompt injection — supervision",
@@ -996,6 +1001,11 @@ export const translations = {
     "wiz.export.zip.hint": "Une image par page",
     "wiz.export.pdf": "PDF",
     "wiz.export.pdf.hint": "Toutes les pages en un fichier",
+    "wiz.source.kind.text": "Texte",
+    "wiz.source.kind.files": "Fichiers",
+    "myTasks.source": "Source",
+    "common.refresh": "Actualiser",
+    "task.status.all": "Toutes",
   },
 };
 

@@ -3,15 +3,16 @@ import { cn } from "../../../lib/utils";
 
 /**
  * The steps of the analysis, numbered. A step already reached is a button
- * (when `canGo`), the current one is highlighted, the others wait.
+ * (when `canGo`, from step `from` on), the current one is highlighted, the
+ * others wait.
  */
-export default function Stepper({ steps, current, reached, canGo, onGo }) {
+export default function Stepper({ steps, current, reached, canGo, onGo, from = 0 }) {
   return (
     <ol className="flex items-center gap-2" aria-label="Progress">
       {steps.map((label, i) => {
         const done = i < current;
         const active = i === current;
-        const clickable = canGo && i <= reached && !active;
+        const clickable = canGo && i >= from && i <= reached && !active;
         return (
           <li key={label} className="flex flex-1 items-center gap-2 last:flex-none">
             <button

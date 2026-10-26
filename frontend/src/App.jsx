@@ -15,7 +15,7 @@ import UserMenu from "./components/UserMenu";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AnalysisPage from "./pages/AnalysisPage";
 import ServicesPage from "./pages/ServicesPage";
-import TaskDetailPage from "./pages/TaskDetailPage";
+import RunPage from "./pages/RunPage";
 import DashboardPage from "./pages/DashboardPage";
 import SensitiveDataPage from "./pages/SensitiveDataPage";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -131,7 +131,7 @@ export default function App() {
             path="/analysis/:taskId"
             element={
               <ProtectedRoute>
-                <TaskDetailPage />
+                <RunPage />
               </ProtectedRoute>
             }
           />
