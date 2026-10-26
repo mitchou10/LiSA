@@ -28,7 +28,7 @@ const mask = (text) => text.replace(/\S/g, "*");
 const show = (text, masked) => (masked ? mask(text) : text);
 
 // Every highlight of a page, as one list: what to draw, where, in what colour.
-function highlights(page, layers, masked) {
+export function highlights(page, layers, masked) {
   const out = [];
   if (layers.entities)
     for (const e of page.entities)
@@ -65,7 +65,7 @@ function highlights(page, layers, masked) {
 }
 
 /** The page screenshot with the boxes of every highlight drawn on it. */
-function PageImage({ page, items, activeId, onActive }) {
+export function PageImage({ page, items, activeId, onActive }) {
   const { t } = useI18n();
   const { url, error, loading } = usePageImage(page.image);
 
@@ -118,7 +118,7 @@ function PageImage({ page, items, activeId, onActive }) {
 }
 
 /** The text the anonymize worker returned: stars, with a coloured [LABEL] per entity. */
-function AnonymizedText({ content, t }) {
+export function AnonymizedText({ content, t }) {
   const parts = content.split(/(\[[^\]\n]+\])/);
   return (
     <div className="space-y-1">
@@ -145,7 +145,7 @@ function AnonymizedText({ content, t }) {
 }
 
 /** The page text with the spans marked: entities highlighted, relation ends underlined. */
-function PageText({ page, items, activeId, onActive, masked }) {
+export function PageText({ page, items, activeId, onActive, masked }) {
   const { t } = useI18n();
   const parts = useMemo(() => segments(page.content, items), [page.content, items]);
   if (!page.content.trim())

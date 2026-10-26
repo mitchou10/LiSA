@@ -1,17 +1,30 @@
-import { useEffect, useMemo, useState } from "react";
-import { textToPages } from "../lib/runModel";
-import { Link, useSearchParams } from "react-router-dom";
-import { FileText, FileUp, Loader2, Play } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { ArrowLeft, ArrowRight, Loader2, Play, RotateCcw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
-import { Textarea } from "../components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
-import RunDocument from "../components/analysis/RunDocument";
-import RunResults from "../components/analysis/RunResults";
+import Stepper from "../components/analysis/wizard/Stepper";
+import StepSource from "../components/analysis/wizard/StepSource";
+import StepAnalysis from "../components/analysis/wizard/StepAnalysis";
+import StepRun from "../components/analysis/wizard/StepRun";
+import StepResults from "../components/analysis/wizard/StepResults";
 import { useProjectRun } from "../hooks/useProjectRun";
-import { DEFINITION_KINDS, getDefinitions, getProjects, uploadFile } from "../lib/api";
-import { nameField } from "../components/projects/DefinitionDialog";
+import {
+  DEFINITION_KINDS,
+  createDefinition,
+  createProject,
+  getDefinitions,
+  getProjects,
+  uploadFile,
+} from "../lib/api";
+import { textToPages } from "../lib/runModel";
 import { useI18n } from "../lib/i18n.jsx";
+
+const SOURCE = 0;
+const ANALYSIS = 1;
+const RUN = 2;
+const RESULTS = 3;
+const TERMINAL = ["success", "error", "revoked"];
 
 // What the run body calls the selection of each kind.
 const BODY_FIELD = {
@@ -21,94 +34,60 @@ const BODY_FIELD = {
   safety: "safety_ids",
 };
 
-const selectClass =
-  "h-10 w-full rounded-md border border-input bg-background/60 px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+// Severity and action of a label created on the fly: what to hide is hidden.
+const PRESET_RULES = {
+  IBAN: { category: "FINANCIAL", severity: "high", action: "block" },
+  CREDIT_CARD: { category: "FINANCIAL", severity: "high", action: "block" },
+  DATE_OF_BIRTH: { category: "IDENTITY", severity: "high", action: "redact" },
+  PERSON: { category: "IDENTITY", severity: "medium", action: "redact" },
+  ORGANIZATION: { category: "BUSINESS", severity: "low", action: "allow" },
+};
 
-/** What to apply: the project's definitions of one kind, as checkboxes. */
-function Selection({ kind, items, selected, onChange, projectId, t }) {
-  const toggle = (id) => {
-    const next = new Set(selected);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    onChange(next);
-  };
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        {t(`projects.kind.${kind}`)}
-        <span className="text-xs text-muted-foreground">
-          {selected.size}/{items.length}
-        </span>
-        {items.length > 0 && (
-          <span className="ml-auto flex gap-2 text-xs">
-            <button
-              type="button"
-              className="text-primary hover:underline"
-              onClick={() => onChange(new Set(items.map((d) => d.id)))}
-            >
-              {t("run.all")}
-            </button>
-            <button
-              type="button"
-              className="text-primary hover:underline"
-              onClick={() => onChange(new Set())}
-            >
-              {t("run.none")}
-            </button>
-          </span>
-        )}
-      </div>
-      {items.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          {t("run.noneDefined")}{" "}
-          <Link to={`/projects/${projectId}`} className="text-primary hover:underline">
-            {t("run.define")}
-          </Link>
-        </p>
-      ) : (
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          {items.map((d) => (
-            <label key={d.id} className="flex items-center gap-1.5 text-sm">
-              <input
-                type="checkbox"
-                checked={selected.has(d.id)}
-                onChange={() => toggle(d.id)}
-              />
-              <span className={d.enabled ? "" : "text-muted-foreground"}>
-                {d[nameField(kind)]}
-              </span>
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+const entityPayload = (label) => ({
+  label,
+  description: null,
+  threshold: null,
+  enabled: true,
+  category: "OTHER",
+  severity: "medium",
+  action: "redact",
+  ...(PRESET_RULES[label] ?? {}),
+});
 
 /**
- * Analyse a text or files with a project: pick the project, pick what to
- * apply from it, send. The backend feeds the workers in the right order
- * (text -> analysers; file -> parser -> analysers).
+ * Analyse a text or files in four steps: what to analyse, how, the progress,
+ * then the results where pages can be blurred and exported. The backend feeds
+ * the workers in the right order (text -> analysers; file -> parser ->
+ * analysers).
  */
 export default function AnalysisPage() {
   const { t } = useI18n();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const { run, running, error, start, reset } = useProjectRun();
 
-  const [projects, setProjects] = useState(null);
-  const [projectsError, setProjectsError] = useState(null);
-  const projectId = params.get("project") ?? "";
-  const [definitions, setDefinitions] = useState(null);
-  const [selected, setSelected] = useState({});
+  const [step, setStep] = useState(SOURCE);
+  const [reached, setReached] = useState(SOURCE);
 
+  // 1. Source
   const [source, setSource] = useState("text");
   const [text, setText] = useState("");
   const [files, setFiles] = useState([]);
-  const [blur, setBlur] = useState(true);
-  // Files: also classify the page images (CLIP) with the same classifications.
-  const [classifyImages, setClassifyImages] = useState(true);
-  // Hide what was found and keep nothing readable in the database.
-  const [anonymize, setAnonymize] = useState(false);
+
+  // 2. Analysis
+  const [projects, setProjects] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [mode, setMode] = useState(params.get("project") ? "project" : "default");
+  const [projectId, setProjectId] = useState(params.get("project") ?? "");
+  const [definitions, setDefinitions] = useState(null);
+  const [selected, setSelected] = useState({});
+  const [newProject, setNewProject] = useState({
+    name: "",
+    labels: new Set(["PERSON", "EMAIL_ADDRESS", "PHONE_NUMBER"]),
+  });
+  const [options, setOptions] = useState({ anonymize: false, blur: true, classifyImages: true });
+  const created = useRef(null); // { key, id, entityIds }: the project made on the fly
+
+  // 3. Run
   const [uploading, setUploading] = useState(false);
   const [formError, setFormError] = useState(null);
   // What was sent: a text is cut into pages here, files come back from the parser.
@@ -116,22 +95,18 @@ export default function AnalysisPage() {
 
   useEffect(() => {
     getProjects()
-      .then((list) => setProjects(list))
-      .catch((err) => setProjectsError(err.message));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      .then(setProjects)
+      .catch((err) => setLoadError(err.message));
   }, []);
 
   // The project's definitions; everything enabled is applied by default.
-  // Without a project, the run applies the default definitions instead.
   useEffect(() => {
-    if (!projectId) {
+    if (mode !== "project" || !projectId) {
       setDefinitions(null);
-      reset();
       return undefined;
     }
     let active = true;
     setDefinitions(null);
-    reset();
     Promise.all(DEFINITION_KINDS.map((k) => getDefinitions(projectId, k)))
       .then((lists) => {
         if (!active) return;
@@ -139,39 +114,66 @@ export default function AnalysisPage() {
         setDefinitions(defs);
         setSelected(
           Object.fromEntries(
-            DEFINITION_KINDS.map((k) => [
-              k,
-              new Set(defs[k].filter((d) => d.enabled).map((d) => d.id)),
-            ])
+            DEFINITION_KINDS.map((k) => [k, new Set(defs[k].filter((d) => d.enabled).map((d) => d.id))])
           )
         );
       })
-      .catch((err) => active && setProjectsError(err.message));
+      .catch((err) => active && setLoadError(err.message));
     return () => {
       active = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
+  }, [mode, projectId]);
+
+  // The run is over: show what it found.
+  useEffect(() => {
+    if (step === RUN && run && TERMINAL.includes(run.status) && !running) {
+      setStep(RESULTS);
+      setReached(RESULTS);
+    }
+  }, [step, run, running]);
 
   const selectedCount = useMemo(
     () => DEFINITION_KINDS.reduce((n, k) => n + (selected[k]?.size ?? 0), 0),
     [selected]
   );
   const hasInput = source === "text" ? text.trim().length > 0 : files.length > 0;
+  const analysisReady =
+    mode === "default" ||
+    (mode === "project" && !!projectId && !!definitions && selectedCount > 0) ||
+    (mode === "new" && newProject.name.trim().length > 0 && newProject.labels.size > 0);
   const busy = running || uploading;
-  // Without a project, the default definitions are always applied.
-  const canRun =
-    hasInput && !busy && (projectId ? definitions && selectedCount > 0 : true);
 
-  const onRun = async () => {
+  const launch = async () => {
     setFormError(null);
+    setStep(RUN);
+    setReached(RUN);
+    reset();
     try {
-      const body = projectId
-        ? Object.fromEntries(
-            DEFINITION_KINDS.map((k) => [BODY_FIELD[k], [...selected[k]]])
-          )
-        : {}; // a default run applies everything it has
-      body.anonymize = anonymize;
+      let pid = "";
+      let body = {};
+      if (mode === "project") {
+        pid = projectId;
+        body = Object.fromEntries(DEFINITION_KINDS.map((k) => [BODY_FIELD[k], [...selected[k]]]));
+      } else if (mode === "new") {
+        // Make the project once; going back and forth reuses it.
+        const key = `${newProject.name.trim()}|${[...newProject.labels].sort().join(",")}`;
+        if (created.current?.key !== key) {
+          const project = await createProject({ name: newProject.name.trim() });
+          const entityIds = [];
+          for (const label of newProject.labels)
+            entityIds.push((await createDefinition(project.id, "entities", entityPayload(label))).id);
+          created.current = { key, id: project.id, entityIds };
+          setProjects((list) => [...(list ?? []), project]);
+        }
+        pid = created.current.id;
+        body = {
+          entity_ids: created.current.entityIds,
+          relation_ids: [],
+          classification_ids: [],
+          safety_ids: [],
+        };
+      }
+      body.anonymize = options.anonymize;
       if (source === "text") {
         body.text = text;
         setSent({ kind: "text", pages: textToPages(text) });
@@ -181,168 +183,132 @@ export default function AnalysisPage() {
         const uploaded = [];
         for (const file of files) uploaded.push(await uploadFile(file));
         body.file_ids = uploaded.map((f) => f.id);
-        body.blur_screenshots = blur;
-        body.classify_images = classifyImages;
+        body.blur_screenshots = options.blur;
+        body.classify_images = options.classifyImages;
         setUploading(false);
       }
-      await start(projectId, body);
+      await start(pid, body);
     } catch (err) {
       setUploading(false);
       setFormError(err.message);
     }
   };
 
-  if (projectsError && !projects)
-    return <p className="text-sm text-destructive">{projectsError}</p>;
+  const restart = () => {
+    reset();
+    setText("");
+    setFiles([]);
+    setSent(null);
+    setStep(SOURCE);
+    setReached(SOURCE);
+  };
+
+  if (loadError && !projects) return <p className="text-sm text-destructive">{loadError}</p>;
   if (!projects) return <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />;
 
+  const titles = [
+    ["wiz.source.title", "wiz.source.desc"],
+    ["wiz.analysis.title", "wiz.analysis.desc"],
+    ["wiz.run.title", "wiz.run.desc"],
+    ["wiz.results.title", "wiz.results.desc"],
+  ][step];
+  const labels = ["wiz.step.source", "wiz.step.analysis", "wiz.step.run", "wiz.step.results"].map(t);
+  const failed = step === RUN && !busy && (formError || error);
+
   return (
-    <div className="space-y-6">
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="mx-auto max-w-4xl space-y-6">
+      <Stepper
+        steps={labels}
+        current={step}
+        reached={reached}
+        canGo={!busy}
+        onGo={(i) => setStep(i)}
+      />
+
       <Card>
         <CardHeader>
-          <CardTitle>{t("run.title")}</CardTitle>
-          <CardDescription>{t("run.desc")}</CardDescription>
+          <CardTitle>{t(titles[0])}</CardTitle>
+          <CardDescription>{t(titles[1])}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium" htmlFor="project">
-              {t("run.project")}
-            </label>
-            <div className="flex items-center gap-2">
-              <select
-                id="project"
-                className={selectClass}
-                value={projectId}
-                onChange={(e) =>
-                  setParams(e.target.value ? { project: e.target.value } : {})
-                }
-              >
-                <option value="">{t("run.default")}</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              {projectId && (
-                <Link
-                  to={`/projects/${projectId}`}
-                  className="shrink-0 text-sm text-primary hover:underline"
-                >
-                  {t("run.manage")}
-                </Link>
-              )}
-            </div>
-            {!projectId && (
-              <p className="text-xs text-muted-foreground">{t("run.default.hint")}</p>
+        <CardContent className="space-y-6">
+          {step === SOURCE && (
+            <StepSource
+              source={source}
+              onSource={setSource}
+              text={text}
+              onText={setText}
+              files={files}
+              onFiles={setFiles}
+            />
+          )}
+          {step === ANALYSIS && (
+            <StepAnalysis
+              mode={mode}
+              onMode={setMode}
+              projects={projects}
+              projectId={projectId}
+              onProject={setProjectId}
+              definitions={definitions}
+              selected={selected}
+              onSelected={setSelected}
+              newProject={newProject}
+              onNewProject={setNewProject}
+              isFile={source === "file"}
+              options={options}
+              onOptions={setOptions}
+            />
+          )}
+          {step === RUN && <StepRun run={run} uploading={uploading} error={formError || error} />}
+          {step === RESULTS && run && <StepResults run={run} source={sent} />}
+
+          <div className="flex items-center justify-between gap-3 border-t border-border pt-4">
+            {step === SOURCE && <span />}
+            {step === ANALYSIS && (
+              <Button variant="outline" onClick={() => setStep(SOURCE)}>
+                <ArrowLeft className="h-4 w-4" />
+                {t("wiz.back")}
+              </Button>
+            )}
+            {step === RUN && (
+              <Button variant="outline" disabled={busy && !failed} onClick={() => setStep(ANALYSIS)}>
+                <ArrowLeft className="h-4 w-4" />
+                {t("wiz.back")}
+              </Button>
+            )}
+            {step === RESULTS && (
+              <Button variant="outline" onClick={() => setStep(ANALYSIS)}>
+                <ArrowLeft className="h-4 w-4" />
+                {t("wiz.tweak")}
+              </Button>
+            )}
+
+            {step === SOURCE && (
+              <Button disabled={!hasInput} onClick={() => setStep(ANALYSIS)}>
+                {t("wiz.next")}
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            )}
+            {step === ANALYSIS && (
+              <Button disabled={!analysisReady || busy} onClick={launch}>
+                <Play className="h-4 w-4" />
+                {t("wiz.launch")}
+              </Button>
+            )}
+            {step === RUN && failed && (
+              <Button onClick={launch}>
+                <RotateCcw className="h-4 w-4" />
+                {t("wiz.retry")}
+              </Button>
+            )}
+            {step === RESULTS && (
+              <Button onClick={restart}>
+                <RotateCcw className="h-4 w-4" />
+                {t("wiz.results.new")}
+              </Button>
             )}
           </div>
-
-          {projectId && !definitions ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : projectId ? (
-            <div className="space-y-4 rounded-lg border border-border p-3">
-              <div className="text-sm font-medium">{t("run.apply")}</div>
-              {DEFINITION_KINDS.map((kind) => (
-                <Selection
-                  key={kind}
-                  kind={kind}
-                  items={definitions[kind]}
-                  selected={selected[kind] ?? new Set()}
-                  onChange={(next) => setSelected({ ...selected, [kind]: next })}
-                  projectId={projectId}
-                  t={t}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-2 rounded-lg border border-border p-3">
-              <div className="text-sm font-medium">{t("run.apply")}</div>
-              <p className="text-xs text-muted-foreground">{t("run.default.applies")}</p>
-            </div>
-          )}
-
-          <Tabs value={source} onValueChange={setSource}>
-            <TabsList className="w-full">
-              <TabsTrigger value="text" className="flex-1">
-                <FileText className="h-4 w-4" /> {t("analyze.tab.text")}
-              </TabsTrigger>
-              <TabsTrigger value="file" className="flex-1">
-                <FileUp className="h-4 w-4" /> {t("analyze.tab.file")}
-              </TabsTrigger>
-            </TabsList>
-            <TabsContent value="text">
-              <Textarea
-                rows={8}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder={t("run.text.placeholder")}
-              />
-            </TabsContent>
-            <TabsContent value="file" className="space-y-3">
-              <input
-                type="file"
-                multiple
-                accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp"
-                onChange={(e) => setFiles([...e.target.files])}
-                className="block w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium"
-              />
-              {files.length > 0 && (
-                <ul className="text-xs text-muted-foreground">
-                  {files.map((f) => (
-                    <li key={f.name + f.size}>
-                      {f.name} · {(f.size / 1024).toFixed(0)} KB
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={blur}
-                  onChange={(e) => setBlur(e.target.checked)}
-                />
-                {t("run.blur")}
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={classifyImages}
-                  onChange={(e) => setClassifyImages(e.target.checked)}
-                />
-                {t("run.classifyImages")}
-              </label>
-              <p className="text-xs text-muted-foreground">{t("run.classifyImages.hint")}</p>
-              <p className="text-xs text-muted-foreground">{t("run.file.hint")}</p>
-            </TabsContent>
-          </Tabs>
-
-          <Button className="w-full" disabled={!canRun} onClick={onRun}>
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            {uploading ? t("run.uploading") : running ? t("run.running") : t("run.start")}
-          </Button>
-          {(formError || error) && (
-            <p className="text-sm text-destructive">{formError || error}</p>
-          )}
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("analyze.results.title")}</CardTitle>
-          <CardDescription>{t("run.results.desc")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {run ? (
-            <RunResults run={run} />
-          ) : (
-            <p className="text-sm text-muted-foreground">{t("run.results.empty")}</p>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-    {run && <RunDocument run={run} source={sent} />}
     </div>
   );
 }
