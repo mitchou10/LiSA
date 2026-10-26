@@ -441,11 +441,6 @@ redis:
       cpu: "1"
       memory: "1Gi"
 
-# A known external S3 (s3.fr-par.scw.cloud, same one used for cnpg backups) is used instead -
-# no need to self-host object storage.
-rustfs:
-  enabled: false
-
 cnpg:
   enabled: true
   fullnameOverride: "lisa-pg-cluster"
