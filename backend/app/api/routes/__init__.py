@@ -12,6 +12,8 @@ from app.api.routes import (
 )
 
 api_router = APIRouter()
+# Also under the API prefix, so a proxy that only forwards /api reaches it.
+api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(services.router)
 api_router.include_router(tasks.router)

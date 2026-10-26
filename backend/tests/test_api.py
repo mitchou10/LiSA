@@ -19,6 +19,13 @@ async def test_health(client: AsyncClient):
     assert resp.json()["status"] == "ok"
 
 
+async def test_health_is_also_served_under_the_api_prefix(client: AsyncClient):
+    """A proxy that only forwards /api must reach it too (the frontend calls it there)."""
+    resp = await client.get("/api/v1/health")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+
 async def test_auth_me_and_config(client: AsyncClient):
     resp = await client.get("/api/v1/auth/config")
     assert resp.json() == {"provider": "keycloak"}
