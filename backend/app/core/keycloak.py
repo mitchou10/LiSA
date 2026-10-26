@@ -35,8 +35,7 @@ def verify_keycloak_token(token: str) -> dict:
         signing_key.key,
         algorithms=["RS256"],
         issuer=settings.keycloak_issuer,
-        audience=settings.keycloak_client_id,
-        options={"verify_aud": bool(settings.keycloak_client_id)},
+        options={"verify_aud": False},
     )
 
 

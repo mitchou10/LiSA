@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 import secrets
 import time
 from urllib.parse import urlencode
@@ -18,6 +19,7 @@ from app.core.session import REFRESH_MARGIN_SECONDS, Session, SessionStore
 from app.models.enums import UserRole
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 _store: SessionStore | None = None
 
@@ -128,7 +130,8 @@ def identity_from_access_token(access_token: str) -> dict | None:
     """Validated identity (signature, issuer, audience) as a plain dict."""
     try:
         claims = verify_keycloak_token(access_token)
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as error:
+        logger.warning("Access token rejected: %s: %s", type(error).__name__, error)
         return None
     sub = claims.get("sub")
     if not sub:
