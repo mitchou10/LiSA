@@ -81,14 +81,3 @@ Cliquer sur une ligne ouvre l'analyse dans la **même vue que la page d'analyse*
 ![Analyse terminée](screenshots/13-tache-terminee.png)
 
 Ouvrir une tâche technique (une étape d'une analyse) renvoie vers l'analyse qui la contient. Une tâche envoyée directement à un service, sans analyse, garde l'ancienne page de détail.
-
-## Travailler sans backend (mocks)
-
-Avec `VITE_USE_MOCKS=true` dans `frontend/.env.local`, tous les appels de l'API sont simulés en mémoire par [`frontend/src/lib/mockBackend.js`](../frontend/src/lib/mockBackend.js) : projets et définitions, runs et tâches (la progression suit l'horloge), captures de pages et export. Trois analyses d'exemple sont déjà dans *Mes tâches* : une sur texte, une terminée sur fichier, et une en cours dont l'horloge est arrêtée, pour pouvoir travailler la vue de progression. Un document d'exemple de deux pages (contrat, annexe avec une tentative d'injection) sert de fichier analysé ; les textes saisis sont analysés par des expressions régulières (e-mail, téléphone, IBAN, date, nom). L'export simulé renvoie la page en SVG avec les entités choisies masquées, quel que soit le format demandé.
-
-```bash
-cd frontend
-npm run dev        # http://localhost:5173, connecté en admin (VITE_BYPASS_AUTH=true)
-```
-
-Mettre `VITE_USE_MOCKS=false` (ou retirer la ligne) pour utiliser le vrai backend.
