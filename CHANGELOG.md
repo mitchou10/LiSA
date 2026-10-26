@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.5](https://github.com/mitchou10/LiSA/compare/v1.3.4...v1.3.5) (2026-10-26)
+
+
+### Bug Fixes
+
+* **helm:** read the RustFS credentials from the lisa-s3 secret ([e596245](https://github.com/mitchou10/LiSA/commit/e59624572860b9b358cfb179660a29e92c4a0c1d))
+
 ## [1.3.4](https://github.com/mitchou10/LiSA/compare/v1.3.3...v1.3.4) (2026-10-26)
 
 
