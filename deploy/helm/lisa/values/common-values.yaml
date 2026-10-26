@@ -665,10 +665,13 @@ extraObjects:
     metadata:
       name: lisa-redis-allow-keda
     spec:
+      # The Redis pods carry the RELEASE name as `instance` (not the service name `lisa-redis`):
+      # a selector on `lisa-redis` matches no pod, the allow rule then does nothing, and KEDA's
+      # connection still times out.
       podSelector:
         matchLabels:
           app.kubernetes.io/name: redis
-          app.kubernetes.io/instance: lisa-redis
+          app.kubernetes.io/instance: "{{ .Release.Name }}"
       policyTypes:
       - Ingress
       ingress:
