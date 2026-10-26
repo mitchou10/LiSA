@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/mitchou10/LiSA/compare/v1.0.1...v1.1.0) (2026-10-26)
+
+
+### Features
+
+* **frontend:** open a run from My tasks in the analysis views ([5a5c747](https://github.com/mitchou10/LiSA/commit/5a5c747d374829bfe93a0950aa29766ff6fe5b50))
+* **frontend:** step-by-step analysis page with mock backend ([b194929](https://github.com/mitchou10/LiSA/commit/b194929f5f3ee1262abc533c08a4054a1e4eb5dd))
+
 ## [1.0.1](https://github.com/mitchou10/LiSA/compare/v1.0.0...v1.0.1) (2026-10-24)
 
 
