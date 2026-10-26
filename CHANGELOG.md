@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/mitchou10/LiSA/compare/v1.2.1...v1.2.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* **helm:** render env values through tpl ([d16c7e9](https://github.com/mitchou10/LiSA/commit/d16c7e927fabda14547056a93c688dd4ad349235))
+
 ## [1.2.1](https://github.com/mitchou10/LiSA/compare/v1.2.0...v1.2.1) (2026-10-26)
 
 
