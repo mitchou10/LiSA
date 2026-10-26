@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.4](https://github.com/mitchou10/LiSA/compare/v1.3.3...v1.3.4) (2026-10-26)
+
+
+### Bug Fixes
+
+* **helm:** set resources on the bundled RustFS ([3a8f485](https://github.com/mitchou10/LiSA/commit/3a8f48561ba391261e8797f1ef3a3d5f87b5061c))
+
 ## [1.3.3](https://github.com/mitchou10/LiSA/compare/v1.3.2...v1.3.3) (2026-10-26)
 
 
