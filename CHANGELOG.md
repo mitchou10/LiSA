@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/mitchou10/LiSA/compare/v1.3.0...v1.3.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **frontend:** make the header sign-in button start the sign-in ([af3b2ce](https://github.com/mitchou10/LiSA/commit/af3b2cec03edf2c2c79e7c4fbf34551eb3251ca3))
+
 ## [1.3.0](https://github.com/mitchou10/LiSA/compare/v1.2.2...v1.3.0) (2026-10-26)
 
 
