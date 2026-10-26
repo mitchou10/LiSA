@@ -64,9 +64,27 @@ Pour un **texte**, il n'y a pas de capture de page, donc pas de flou à l'export
 
 ![Résultats d'un texte](screenshots/10-resultats-texte.png)
 
+## Retrouver une analyse : Mes tâches
+
+*Mes tâches* liste les analyses lancées (une ligne par analyse, pas par tâche technique) avec leur source, leur statut, leur progression et leur durée.
+
+![Mes tâches](screenshots/11-mes-taches.png)
+
+Cliquer sur une ligne ouvre l'analyse dans la **même vue que la page d'analyse**, à l'étape où elle en est. Les étapes *Source* et *Analyse*, choisies au lancement, ne sont plus modifiables.
+
+**Analyse en cours** : la progression de chaque tâche, qui se met à jour seule. Quand l'analyse se termine, la page passe toute seule aux résultats.
+
+![Analyse en cours](screenshots/12-tache-en-cours.png)
+
+**Analyse terminée** : les résultats, avec la sélection des entités à flouter et l'export, exactement comme à la fin du parcours. Le fil d'Ariane permet de basculer entre *Progression* et *Résultats*.
+
+![Analyse terminée](screenshots/13-tache-terminee.png)
+
+Ouvrir une tâche technique (une étape d'une analyse) renvoie vers l'analyse qui la contient. Une tâche envoyée directement à un service, sans analyse, garde l'ancienne page de détail.
+
 ## Travailler sans backend (mocks)
 
-Avec `VITE_USE_MOCKS=true` dans `frontend/.env.local`, tous les appels de l'API sont simulés en mémoire par [`frontend/src/lib/mockBackend.js`](../frontend/src/lib/mockBackend.js) : projets et définitions, runs et tâches (la progression suit l'horloge), captures de pages et export. Un document d'exemple de deux pages (contrat, annexe avec une tentative d'injection) sert de fichier analysé ; les textes saisis sont analysés par des expressions régulières (e-mail, téléphone, IBAN, date, nom). L'export simulé renvoie la page en SVG avec les entités choisies masquées, quel que soit le format demandé.
+Avec `VITE_USE_MOCKS=true` dans `frontend/.env.local`, tous les appels de l'API sont simulés en mémoire par [`frontend/src/lib/mockBackend.js`](../frontend/src/lib/mockBackend.js) : projets et définitions, runs et tâches (la progression suit l'horloge), captures de pages et export. Trois analyses d'exemple sont déjà dans *Mes tâches* : une sur texte, une terminée sur fichier, et une en cours dont l'horloge est arrêtée, pour pouvoir travailler la vue de progression. Un document d'exemple de deux pages (contrat, annexe avec une tentative d'injection) sert de fichier analysé ; les textes saisis sont analysés par des expressions régulières (e-mail, téléphone, IBAN, date, nom). L'export simulé renvoie la page en SVG avec les entités choisies masquées, quel que soit le format demandé.
 
 ```bash
 cd frontend

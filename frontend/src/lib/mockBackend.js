@@ -383,9 +383,9 @@ function stepOutput(step, run) {
   }
 }
 
-function startRun(projectId, body) {
+function startRun(projectId, body, opts = {}) {
   const isFiles = !!body.file_ids?.length;
-  const id = uid("run");
+  const id = opts.id ?? uid("run");
   const pick = (key) => body[key]?.length;
   // A project run applies only what was selected; a default run applies all.
   const all = !projectId;
@@ -406,7 +406,9 @@ function startRun(projectId, body) {
     : null;
   const run = {
     id,
-    startedAt: Date.now(),
+    startedAt: opts.startedAt ?? Date.now(),
+    frozenAt: opts.frozenAt ?? null,
+    anonymize: !!body.anonymize,
     projectId,
     source: isFiles
       ? { kind: "files", filename: lastUpload }
@@ -422,15 +424,24 @@ function startRun(projectId, body) {
   };
 }
 
+// Seconds since the run started; a frozen run stays where it is.
+const elapsedOf = (run) => run.frozenAt ?? (Date.now() - run.startedAt) / 1000;
+
 function stepTask(run, s) {
-  const elapsed = (Date.now() - run.startedAt) / 1000;
+  const elapsed = elapsedOf(run);
   const status = elapsed >= s.end ? "success" : elapsed >= s.start ? "running" : "pending";
   const progress = status === "success" ? 100 : status === "running" ? Math.round(((elapsed - s.start) / (s.end - s.start)) * 100) : 0;
   return {
     id: s.task_id,
+    parent_task_id: run.id,
+    service_id: `svc-${s.step}`,
+    user_id: "dev-user",
+    created_at: new Date(run.startedAt + run.steps.indexOf(s)).toISOString(),
     status,
     progress,
-    input_data: {},
+    input_data: s.step === "parser" || s.step === "image_classification" || !run.source.pages
+      ? {}
+      : { pages: run.source.pages.map((p) => ({ page_number: p.number, content: p.content })) },
     output_data: status === "success" ? stepOutput(s.step, run) : null,
     error: null,
     duration_seconds: status === "success" ? Number((s.end - s.start).toFixed(2)) : null,
@@ -439,22 +450,82 @@ function stepTask(run, s) {
 
 function runStatus(run) {
   const last = Math.max(...run.steps.map((s) => s.end));
-  const elapsed = (Date.now() - run.startedAt) / 1000;
-  return elapsed >= last
+  return elapsedOf(run) >= last
     ? { status: "success", duration_seconds: last }
     : { status: "running", duration_seconds: null };
 }
 
-function tasksRoute(method, parts, body) {
+function tasksRoute(method, parts, body, query) {
   const [, id, sub] = parts;
   if (id === "runs" && method === "POST") return startRun(null, body);
+  if (id === "me") return myTasks(query);
   const stepRun = [...runs.values()].find((r) => r.steps.some((s) => s.task_id === id));
   if (stepRun) return stepTask(stepRun, stepRun.steps.find((s) => s.task_id === id));
   const run = runs.get(id);
   if (!run) throw Object.assign(new Error("Task not found"), { status: 404 });
   if (sub === "children") return run.steps.map((s) => stepTask(run, s));
-  return { id, progress: 0, input_data: {}, output_data: null, error: null, ...runStatus(run) };
+  return runTask(run);
 }
+
+// The parent task of a run, as the backend lists it.
+function runTask(run) {
+  const tasks = run.steps.map((s) => stepTask(run, s));
+  return {
+    id: run.id,
+    parent_task_id: null,
+    service_id: null,
+    user_id: "dev-user",
+    created_at: new Date(run.startedAt).toISOString(),
+    updated_at: new Date().toISOString(),
+    progress: Math.round(tasks.reduce((n, tk) => n + tk.progress, 0) / tasks.length),
+    input_data: {
+      kind: run.projectId ? "project_run" : "default_run",
+      source: run.source.kind,
+      anonymize: run.anonymize,
+    },
+    output_data: null,
+    error: null,
+    ...runStatus(run),
+  };
+}
+
+const STEP_SERVICES = {
+  parser: "liteparse-ocr",
+  ner: "ner",
+  relation: "relation",
+  classification: "classification",
+  safety: "safety",
+  image_classification: "image-classification",
+  anonymize: "anonymize-v2",
+};
+
+const services = () =>
+  Object.entries(STEP_SERVICES).map(([step, name]) => ({
+    id: `svc-${step}`,
+    name,
+    version: "0.1.0",
+    type: "other",
+  }));
+
+// The user's runs, newest first (the page lists roots only).
+function myTasks(query) {
+  const status = new URLSearchParams(query).get("status");
+  const items = [...runs.values()]
+    .map(runTask)
+    .filter((tk) => !status || tk.status === status)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  return { items, total: items.length, limit: 50, offset: 0 };
+}
+
+// A few runs to have something in "My tasks": one finished on a file, one
+// still in progress (its clock is stopped, so it can be worked on), one text.
+const MIN = 60 * 1000;
+startRun(null, { text: "Bonjour, je suis Marie Dupont, née le 14/03/1986. Mon e-mail : marie.dupont@example.fr, mon IBAN : FR76 3000 6000 0112 3456 7890 189." }, { id: "run-demo-text", startedAt: Date.now() - 62 * MIN });
+lastUpload = "contrat-prestation.pdf";
+startRun("p-hr", { file_ids: ["f1"], entity_ids: ["e-person", "e-email"], safety_ids: ["s-inj"], classify_images: true }, { id: "run-demo-done", startedAt: Date.now() - 4 * MIN });
+lastUpload = "dossier-candidat.pdf";
+startRun(null, { file_ids: ["f2"], classify_images: true }, { id: "run-demo-live", startedAt: Date.now() - 10 * 1000, frozenAt: 2.6 });
+lastUpload = "document.pdf";
 
 // ── Entry points used by api.js ────────────────────────────────────────────
 
@@ -468,7 +539,8 @@ export async function mockRequest(path, options = {}) {
     if (parts[2] === "runs" && method === "POST") return startRun(parts[1], body);
     return projectsRoute(method, parts, body);
   }
-  if (parts[0] === "tasks") return tasksRoute(method, parts, body);
+  if (parts[0] === "tasks") return tasksRoute(method, parts, body, path.split("?")[1] ?? "");
+  if (parts[0] === "services") return services();
   throw new Error(`Mock API: ${method} ${path} is not mocked`);
 }
 

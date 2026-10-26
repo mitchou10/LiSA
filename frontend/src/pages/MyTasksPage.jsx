@@ -42,15 +42,6 @@ function StatusBadge({ status }) {
   );
 }
 
-function formatDurationShort(ms) {
-  if (!ms) return "-";
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  return `${m}m ${sec}s`;
-}
-
 export default function MyTasksPage() {
   const { t } = useI18n();
   const [tasks, setTasks] = useState([]);
@@ -59,7 +50,7 @@ export default function MyTasksPage() {
 
   const loadTasks = useCallback(() => {
     setLoading(true);
-    const params = filter !== "all" ? { status: filter } : {};
+    const params = { rootsOnly: true, ...(filter !== "all" ? { status: filter } : {}) };
     getMyTasks(params)
       .then((page) => setTasks(page.items || []))
       .catch(console.error)
@@ -143,7 +134,7 @@ export default function MyTasksPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>{t("myTasks.id")}</TableHead>
-                  <TableHead>{t("myTasks.service")}</TableHead>
+                  <TableHead>{t("myTasks.source")}</TableHead>
                   <TableHead>{t("myTasks.status")}</TableHead>
                   <TableHead>{t("myTasks.progress")}</TableHead>
                   <TableHead>{t("myTasks.duration")}</TableHead>
@@ -156,19 +147,21 @@ export default function MyTasksPage() {
                   <TableRow key={task.id}>
                     <TableCell>
                       <Link
-                        to={`/tasks/${task.id}`}
+                        to={`/analysis/${task.id}`}
                         className="font-medium hover:underline"
                       >
                         {task.id.slice(0, 8)}...
                       </Link>
                     </TableCell>
-                    <TableCell>{task.service_name || "-"}</TableCell>
+                    <TableCell>
+                      {task.input_data?.source ? t(`wiz.source.kind.${task.input_data.source}`) : "-"}
+                    </TableCell>
                     <TableCell>
                       <StatusBadge status={task.status} />
                     </TableCell>
                     <TableCell>{task.progress}%</TableCell>
                     <TableCell>
-                      {task.duration_ms ? formatDurationShort(task.duration_ms) : "-"}
+                      {task.duration_seconds != null ? formatDuration(task.duration_seconds) : "-"}
                     </TableCell>
                     <TableCell>
                       {new Date(task.created_at).toLocaleString()}
