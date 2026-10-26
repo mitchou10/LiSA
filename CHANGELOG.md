@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/mitchou10/LiSA/compare/v1.2.0...v1.2.1) (2026-10-26)
+
+
+### Bug Fixes
+
+* **frontend:** call the API on the same origin by default ([1cb1ef1](https://github.com/mitchou10/LiSA/commit/1cb1ef19defcf9d4bc4efc3e836020878ab2446a))
+
 ## [1.2.0](https://github.com/mitchou10/LiSA/compare/v1.1.0...v1.2.0) (2026-10-26)
 
 
