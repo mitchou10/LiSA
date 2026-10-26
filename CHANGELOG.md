@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.2](https://github.com/mitchou10/LiSA/compare/v1.3.1...v1.3.2) (2026-10-26)
+
+
+### Bug Fixes
+
+* **backend:** skip the audience check on Keycloak tokens and log rejected ones ([3dda04d](https://github.com/mitchou10/LiSA/commit/3dda04d91fbc45620837d8c6636860d53ee24572))
+
 ## [1.3.1](https://github.com/mitchou10/LiSA/compare/v1.3.0...v1.3.1) (2026-10-26)
 
 
