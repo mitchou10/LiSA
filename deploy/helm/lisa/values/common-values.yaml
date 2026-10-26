@@ -140,7 +140,7 @@ anonymize:
       name: "lisa-redis"
   env:
     # Internal cluster URL - uses the Service DNS, computed from release name.
-    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "llm-guard-anonymize"
   envCm:
     AWS_S3_REGION: "us-east-1"
@@ -163,7 +163,7 @@ safety:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "safety"
     SAFETY_MODEL: "fastino/GLiNER2-Guardrails-PII-Multi"
 
@@ -185,7 +185,7 @@ ner:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "ner"
     NER_MODEL: "fastino/gliner2.5-multi-v1"
     NER_THRESHOLD: "0.5"
@@ -208,7 +208,7 @@ relation:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "relation"
     RELATION_MODEL: "fastino/gliner2.5-multi-v1"
     RELATION_THRESHOLD: "0.5"
@@ -231,7 +231,7 @@ classification:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "classification"
     CLASSIFIER_BACKEND: "gliner2"
     CLASSIFIER_MODEL: "fastino/gliner2.5-multi-v1"
@@ -257,7 +257,7 @@ imageClassification:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "image-classification"
   envCm:
     IMAGE_MODEL: "openai/clip-vit-base-patch32"
@@ -284,7 +284,7 @@ parser:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "liteparse-ocr"
   envCm:
     OCR_LANGUAGE: "eng+fra"
