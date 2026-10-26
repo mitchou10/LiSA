@@ -4,6 +4,12 @@ La page **Analyse** guide l'utilisateur en quatre étapes : quoi analyser, comme
 
 Code : [`frontend/src/pages/AnalysisPage.jsx`](../frontend/src/pages/AnalysisPage.jsx) et [`frontend/src/components/analysis/wizard/`](../frontend/src/components/analysis/wizard/).
 
+## Page de connexion
+
+La page de connexion est aussi la page de présentation du produit : ce que fait LiSA (données sensibles, relations, classification, contrôles de sécurité, documents réels, flou et anonymisation), le parcours en quatre étapes, un aperçu des écrans, puis ce qui rassure (authentification unique, règles par projet, historique, déploiement sur votre infrastructure). Le bouton *Se connecter* envoie vers Keycloak ; un utilisateur déjà connecté est renvoyé vers l'application.
+
+![Page de connexion](screenshots/00-page-de-connexion.png)
+
 ## 1. Source : un texte ou un fichier
 
 Deux cartes au choix. La carte sélectionnée s'ouvre et affiche sa zone de saisie.
