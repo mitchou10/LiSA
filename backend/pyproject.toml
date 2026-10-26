@@ -1,6 +1,6 @@
 [project]
 name = "lisa-server"
-version = "1.3.2"
+version = "1.3.3"
 description = "LiSA backend API: services & tasks management"
 requires-python = ">=3.13"
 dependencies = [
