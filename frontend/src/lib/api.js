@@ -1,6 +1,9 @@
 // Minimal API client for the LiSA backend.
+// VITE_API_URL is fixed at build time. Unset: local development (backend on
+// :8000). Set to an empty string: same origin, for when the API is served on
+// the same host as the app (calls go to /api/v1/...).
 const BASE_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:8000"
+  import.meta.env.VITE_API_URL ?? "http://localhost:8000"
 ).replace(/\/$/, "");
 
 const API_V1 = `${BASE_URL}/api/v1`;
@@ -44,7 +47,7 @@ async function request(path, options = {}) {
 }
 
 export async function getHealth() {
-  const res = await fetch(`${BASE_URL}/health`);
+  const res = await fetch(`${API_V1}/health`);
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
