@@ -443,6 +443,12 @@ redis:
 
 # The namespace quota (dso-quota) rejects any pod without requests/limits.
 rustfs:
+  # Root credentials come from the same Vault secret the components use to reach RustFS,
+  # so both sides always agree.
+  auth:
+    existingSecret: "lisa-s3"
+    existingSecretAccessKeyKey: "S3_ACCESS_KEY"
+    existingSecretSecretKeyKey: "S3_SECRET_KEY"
   resources:
     requests:
       cpu: "250m"
