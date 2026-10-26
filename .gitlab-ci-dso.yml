@@ -40,6 +40,23 @@ read_secret:
   rules:
     - when: always
 
+# The torch / model images are several GB: a Kaniko build of one holds the layers of two stages
+# plus its snapshots on the node's ephemeral storage, and several of them at once (or next to the
+# small builds) got a pod evicted by the kubelet ("node was low on resource: ephemeral-storage").
+# - `--snapshot-mode=redo`, `--use-new-run` and `--compressed-caching=false` make Kaniko snapshot
+#   less and keep fewer copies of the filesystem on disk.
+# - an ephemeral-storage request/limit makes the scheduler count the build (it was 0, so the node
+#   was packed with builds) and confines an overflow to this pod instead of the whole node. Tune
+#   them to the runner's nodes; they only apply if the runner allows these overwrites.
+# - `resource_group` keeps two of these builds at a time, not all five.
+.docker-build-heavy:
+  extends:
+    - .docker-build-common
+  variables:
+    EXTRA_BUILD_ARGS: "--build-arg DOCKERHUB_MIRROR_URL=${DOCKERHUB_MIRROR_URL} --snapshot-mode=redo --use-new-run --compressed-caching=false"
+    KUBERNETES_EPHEMERAL_STORAGE_REQUEST: "10Gi"
+    KUBERNETES_EPHEMERAL_STORAGE_LIMIT: "16Gi"
+
 docker-build-backend:
   extends:
     - .docker-build-common
@@ -122,7 +139,8 @@ docker-build-anonymize:
 
 docker-build-safety:
   extends:
-    - .docker-build-common
+    - .docker-build-heavy
+  resource_group: docker-build-heavy-b
   variables:
     # The Dockerfile COPYs from the repo root (worker/ and services/safety/),
     # so the build context must be the repo root, not services/safety.
@@ -149,7 +167,8 @@ docker-build-safety:
 
 docker-build-ner:
   extends:
-    - .docker-build-common
+    - .docker-build-heavy
+  resource_group: docker-build-heavy-a
   variables:
     # The Dockerfile COPYs from the repo root (worker/ and services/ner/),
     # so the build context must be the repo root, not services/ner.
@@ -176,7 +195,8 @@ docker-build-ner:
 
 docker-build-relation:
   extends:
-    - .docker-build-common
+    - .docker-build-heavy
+  resource_group: docker-build-heavy-b
   variables:
     # The Dockerfile COPYs from the repo root (worker/ and services/relation/),
     # so the build context must be the repo root, not services/relation.
@@ -203,7 +223,8 @@ docker-build-relation:
 
 docker-build-classification:
   extends:
-    - .docker-build-common
+    - .docker-build-heavy
+  resource_group: docker-build-heavy-a
   variables:
     # The Dockerfile COPYs from the repo root (worker/ and services/classification/),
     # so the build context must be the repo root, not services/classification.
@@ -230,7 +251,8 @@ docker-build-classification:
 
 docker-build-image-classification:
   extends:
-    - .docker-build-common
+    - .docker-build-heavy
+  resource_group: docker-build-heavy-a
   variables:
     # The Dockerfile COPYs from the repo root (worker/ and services/image-classification/),
     # so the build context must be the repo root, not services/image-classification.
