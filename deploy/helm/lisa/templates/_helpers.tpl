@@ -135,20 +135,27 @@ imagePullSecrets:
 {{- end -}}
 
 
-{{/*Create container environment variables with tranform from map to array
+{{/*Create container environment variables with tranform from map to array. Scalar values go
+through `tpl`, like `envCm` / `envSecret` (see `helper.env`), so an entry such as
+`LISA_API_URL: "http://{{ .Release.Name }}-backend:8000"` is rendered instead of reaching the
+container as literal text. A value written as a map (e.g. `valueFrom`) is passed through as is.
+Parameters:
+- root: The root context.
+- data: The `env` value (map or array).
 */}}
 {{- define "helper.env.map-to-array" -}}
-{{- if kindIs "map" . }}
-  {{- range $key, $val := . }}
+{{- $root := .root -}}
+{{- if kindIs "map" .data }}
+  {{- range $key, $val := .data }}
 - name: {{ $key }}
     {{- if kindIs "map" $val }}
       {{- toYaml $val | nindent 2 }}
     {{- else }}
-  value: {{ $val | quote }}
+  value: {{ tpl (toString $val) $root | quote }}
     {{- end }}
   {{- end }}
 {{- else }}
-  {{- toYaml . }}
+  {{- toYaml .data }}
 {{- end }}
 {{- end }}
 
@@ -169,10 +176,10 @@ Parameters:
 {{- $globalEnv := .root.Values.global.env -}}
 {{- $componentEnv := .componentEnv -}}
 {{- if $globalEnv }}
-{{- include "helper.env.map-to-array" $globalEnv }}
+{{- include "helper.env.map-to-array" (dict "root" .root "data" $globalEnv) }}
 {{- end }}
 {{ if $componentEnv }}
-{{- include "helper.env.map-to-array" $componentEnv }}
+{{- include "helper.env.map-to-array" (dict "root" .root "data" $componentEnv) }}
 {{- end }}
 {{- end -}}
 
