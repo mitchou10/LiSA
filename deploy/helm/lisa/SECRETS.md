@@ -33,6 +33,9 @@ present in the same secret so every consumer gets what it needs.
 | `AWS_SECRET_ACCESS_KEY` | `rustfsadmin` | anonymize |
 | `AWS_S3_BUCKET` | `lisa-files` | anonymize |
 
+> RustFS itself reads its root credentials from this secret (`S3_ACCESS_KEY` /
+> `S3_SECRET_KEY`), so you choose them here and nowhere else.
+
 > `S3_REGION` / `AWS_S3_REGION` are set as plain `env` in the chart
 > (`us-east-1`), not from the secret — but having them in Vault too is fine.
 
