@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.3](https://github.com/mitchou10/LiSA/compare/v1.3.2...v1.3.3) (2026-10-26)
+
+
+### Bug Fixes
+
+* **helm:** enable the bundled RustFS in the DSO values ([aa2705c](https://github.com/mitchou10/LiSA/commit/aa2705cf1dd9d664660245e1c75acf2fa30ceebc))
+
 ## [1.3.2](https://github.com/mitchou10/LiSA/compare/v1.3.1...v1.3.2) (2026-10-26)
 
 
