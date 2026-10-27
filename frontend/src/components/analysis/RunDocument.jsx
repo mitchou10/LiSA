@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ChevronLeft,
@@ -9,6 +9,9 @@ import {
   ImageOff,
   Loader2,
   PencilRuler,
+  Maximize2,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
@@ -22,6 +25,9 @@ import { useI18n } from "../../lib/i18n.jsx";
 
 const HEAD_COLOR = "hsl(215 80% 50%)";
 const TAIL_COLOR = "hsl(285 70% 50%)";
+const ZOOM_MIN = 1;
+const ZOOM_MAX = 5;
+const clampZoom = (z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
 const pct = (n) => (n == null ? "" : `${Math.round(n * 100)}%`);
 
 // Hide a text: every character but whitespace becomes "*", so lengths and
@@ -81,6 +87,31 @@ export function PageImage({
   const { url, error, loading } = usePageImage(page.image);
   // The box being dragged, in fractions of the page.
   const [draft, setDraft] = useState(null);
+  // 1 = the page fits the width; above, the page is wider and scrolls.
+  const [zoom, setZoom] = useState(1);
+  const scroller = useRef(null);
+
+  // Ctrl/Cmd + wheel zooms toward the cursor (a plain wheel still scrolls).
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return undefined;
+    const onWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      const px = e.clientX - r.left;
+      const py = e.clientY - r.top;
+      setZoom((z) => {
+        const next = clampZoom(z * (e.deltaY < 0 ? 1.15 : 1 / 1.15));
+        const k = next / z;
+        el.scrollLeft = (el.scrollLeft + px) * k - px;
+        el.scrollTop = (el.scrollTop + py) * k - py;
+        return next;
+      });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [url]);
 
   const point = (e) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -124,11 +155,57 @@ export function PageImage({
     );
   if (!url) return null;
   return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-end gap-1">
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          title={t("run.doc.zoomOut")}
+          disabled={zoom <= ZOOM_MIN}
+          onClick={() => setZoom((z) => clampZoom(z - 0.5))}
+        >
+          <ZoomOut className="h-4 w-4" />
+        </Button>
+        <button
+          type="button"
+          title={t("run.doc.zoomFit")}
+          onClick={() => setZoom(1)}
+          className="w-12 text-center text-xs tabular-nums text-muted-foreground hover:text-foreground"
+        >
+          {Math.round(zoom * 100)}%
+        </button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          title={t("run.doc.zoomIn")}
+          disabled={zoom >= ZOOM_MAX}
+          onClick={() => setZoom((z) => clampZoom(z + 0.5))}
+        >
+          <ZoomIn className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          title={t("run.doc.zoomFit")}
+          disabled={zoom === 1}
+          onClick={() => setZoom(1)}
+        >
+          <Maximize2 className="h-4 w-4" />
+        </Button>
+      </div>
+      <div
+        ref={scroller}
+        className={cn(
+          "rounded-lg border border-border",
+          zoom > 1 ? "max-h-[75vh] overflow-auto" : "overflow-hidden"
+        )}
+      >
     <div
-      className={cn(
-        "relative overflow-hidden rounded-lg border border-border",
-        drawMode && "cursor-crosshair touch-none"
-      )}
+      className={cn("relative", drawMode && "cursor-crosshair touch-none")}
+      style={{ width: `${zoom * 100}%` }}
       onPointerDown={startDraw}
       onPointerMove={moveDraw}
       onPointerUp={endDraw}
@@ -194,6 +271,9 @@ export function PageImage({
           />
         ))
       )}
+    </div>
+      </div>
+      <p className="text-xs text-muted-foreground">{t("run.doc.zoomHint")}</p>
     </div>
   );
 }
