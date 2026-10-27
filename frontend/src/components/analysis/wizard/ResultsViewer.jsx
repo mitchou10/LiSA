@@ -9,14 +9,18 @@ import {
   FileImage,
   FileText,
   Loader2,
+  Move,
   PencilRuler,
 } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
+import { Input } from "../../ui/input";
 import { useEntityLabels } from "../../../hooks/useEntityLabels";
 import { usePageBboxes } from "../../../hooks/usePageBboxes";
+import { useRunEdits } from "../../../hooks/useRunEdits";
 import { renderRunDocument } from "../../../lib/api";
 import { buildPages, colorFor, isAnonymizing } from "../../../lib/runModel";
+import { distinctTexts, overrideKey, replacementKey, withOverrides } from "../../../lib/runEdits";
 import { cn } from "../../../lib/utils";
 import { useI18n } from "../../../lib/i18n.jsx";
 import DrawBoxDialog from "../DrawBoxDialog";
@@ -29,9 +33,11 @@ const LAYERS = { entities: true, relations: false };
 const key = (page, entity) => `${page.number}:${entity.id}`;
 
 /** What to blur and how to download it. Only for runs that have page images. */
-function ExportBar({ run, page, total, checked, drawnCount, t }) {
+function ExportBar({ run, page, total, checked, drawnCount, hasReplacements, t }) {
   const [blur, setBlur] = useState("entities");
   const [boxes, setBoxes] = useState(false);
+  // The replacement texts are applied when asked, at each export.
+  const [replace, setReplace] = useState(true);
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
 
@@ -42,7 +48,7 @@ function ExportBar({ run, page, total, checked, drawnCount, t }) {
     setBusy(format);
     setError(null);
     try {
-      const body = { format, blur: nothing ? "none" : blur, boxes };
+      const body = { format, blur: nothing ? "none" : blur, boxes, replace: replace && hasReplacements };
       if (format === "png") body.page_numbers = [page.number];
       if (blur === "entities" && checked.size === 0) body.entities = false;
       else if (blur === "entities" && checked.size < total) body.entity_ids = [...checked];
@@ -118,11 +124,64 @@ function ExportBar({ run, page, total, checked, drawnCount, t }) {
         ))}
       </div>
 
+      {hasReplacements && (
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1" checked={replace} onChange={(e) => setReplace(e.target.checked)} />
+          <span>
+            {t("wiz.export.replace")}
+            <span className="block text-xs text-muted-foreground">{t("wiz.export.replace.hint")}</span>
+          </span>
+        </label>
+      )}
       <label className="flex items-center gap-2 text-sm text-muted-foreground">
         <input type="checkbox" checked={boxes} onChange={(e) => setBoxes(e.target.checked)} />
         {t("run.doc.boxes")}
       </label>
       {error && <p className="text-sm text-destructive">{error}</p>}
+    </section>
+  );
+}
+
+/**
+ * One text to write instead of every entity that reads the same (any case,
+ * any page). Saved when the field is left, or on Enter; empty removes it.
+ */
+function Replacements({ pages, replacements, onSet, t }) {
+  const texts = useMemo(() => distinctTexts(pages), [pages]);
+  if (texts.length === 0) return null;
+  return (
+    <section className="space-y-2">
+      <div>
+        <h3 className="font-medium">{t("wiz.replace.title")}</h3>
+        <p className="text-xs text-muted-foreground">{t("wiz.replace.hint")}</p>
+      </div>
+      <ul className="max-h-72 space-y-1 overflow-auto pr-1">
+        {texts.map((g) => {
+          const value = replacements.get(g.key) ?? "";
+          return (
+            <li key={g.key} className="flex items-center gap-2 text-sm">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium" title={g.text}>
+                  {g.text}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {g.label} · {t("wiz.replace.count").replace("{n}", g.count)}
+                </span>
+              </span>
+              <Input
+                key={`${g.key}:${value}`}
+                defaultValue={value}
+                maxLength={255}
+                placeholder={t("wiz.replace.placeholder")}
+                aria-label={`${t("wiz.replace.title")}: ${g.text}`}
+                className="h-8 w-40"
+                onBlur={(e) => onSet(g.text, e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+              />
+            </li>
+          );
+        })}
+      </ul>
     </section>
   );
 }
@@ -134,13 +193,17 @@ function ExportBar({ run, page, total, checked, drawnCount, t }) {
  */
 export default function ResultsViewer({ run, source }) {
   const { t } = useI18n();
-  const pages = useMemo(() => buildPages(run, source), [run, source]);
+  const detected = useMemo(() => buildPages(run, source), [run, source]);
   const [index, setIndex] = useState(0);
   const [view, setView] = useState("image");
   const [activeId, setActiveId] = useState(null);
   // Boxes drawn by hand on the page: blurred on export, kept for the metrics.
-  const { boxes: drawn, add: addDrawn, remove: removeDrawn } = usePageBboxes(run?.id);
-  // null, "label" (draw a box, then name it) or "blur" (draw a box to blur, nothing else).
+  const { boxes: drawn, add: addDrawn, move: moveDrawn, remove: removeDrawn } = usePageBboxes(run?.id);
+  const edits = useRunEdits(run?.id);
+  // The boxes users corrected stand in for the detected ones everywhere.
+  const pages = useMemo(() => withOverrides(detected, edits.overrides), [detected, edits.overrides]);
+  // null, "label" (draw a box, then name it), "blur" (draw a box to blur) or
+  // "edit" (move and resize the boxes already there).
   const [drawMode, setDrawMode] = useState(null);
   // A box just drawn, waiting for its label: { pageNumber, box, url }.
   const [pending, setPending] = useState(null);
@@ -155,7 +218,16 @@ export default function ResultsViewer({ run, source }) {
 
   const labels = useEntityLabels(run, pages);
   const page = pages[Math.min(index, pages.length - 1)];
-  const items = useMemo(() => (page ? highlights(page, LAYERS, masked) : []), [page, masked]);
+  const items = useMemo(
+    () =>
+      page
+        ? highlights(page, LAYERS, masked).map((h) => ({
+            ...h,
+            replacement: h.kind === "entity" ? edits.replacements.get(replacementKey(h.text)) : undefined,
+          }))
+        : [],
+    [page, masked, edits.replacements]
+  );
   if (!page) return null;
 
   const hasImages = pages.some((p) => p.image);
@@ -241,7 +313,16 @@ export default function ResultsViewer({ run, source }) {
                     title={t("run.doc.blurHint")}
                   >
                     <EyeOff className="h-4 w-4" />
-                    {t("run.doc.blur")}
+                    {t("run.doc.blurArea")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={drawMode === "edit" ? "secondary" : "ghost"}
+                    onClick={() => setDrawMode(drawMode === "edit" ? null : "edit")}
+                    title={t("run.doc.editHint")}
+                  >
+                    <Move className="h-4 w-4" />
+                    {t("run.doc.edit")}
                   </Button>
                   <Button
                     size="sm"
@@ -270,7 +351,15 @@ export default function ResultsViewer({ run, source }) {
               activeId={activeId}
               onActive={setActiveId}
               drawn={drawn.filter((b) => b.page_number === page.number)}
-              drawMode={!!drawMode}
+              drawMode={drawMode === "label" || drawMode === "blur"}
+              editMode={drawMode === "edit"}
+              overridden={edits.overrides}
+              onResetBox={(entityId, index) => edits.reset(overrideKey(page.number, entityId, index))}
+              onMoveBox={(target, box) =>
+                target.kind === "drawn"
+                  ? moveDrawn(target.id, box)
+                  : edits.correct(page.number, target.entityId, target.index, box)
+              }
               onDraw={(box, url) =>
                 drawMode === "blur"
                   ? addDrawn(page.number, box)
@@ -347,6 +436,7 @@ export default function ResultsViewer({ run, source }) {
               );
             })}
           </ul>
+          {hasImages && <Replacements pages={pages} replacements={edits.replacements} onSet={edits.set} t={t} />}
           {hasImages && pages.length > 1 && (
             <p className="text-xs text-muted-foreground">
               {t("wiz.viewer.total").replace("{n}", checked.size).replace("{total}", allKeys.length)}
@@ -362,6 +452,7 @@ export default function ResultsViewer({ run, source }) {
           total={allKeys.length}
           checked={checked}
           drawnCount={drawn.length}
+          hasReplacements={edits.replacements.size > 0}
           t={t}
         />
       ) : (

@@ -20,6 +20,7 @@ import { usePageImage } from "../../hooks/usePageImage";
 import { usePageBboxes } from "../../hooks/usePageBboxes";
 import { renderRunDocument } from "../../lib/api";
 import { buildPages, colorFor, isAnonymizing, segments } from "../../lib/runModel";
+import { overrideKey } from "../../lib/runEdits";
 import { cn } from "../../lib/utils";
 import { useI18n } from "../../lib/i18n.jsx";
 
@@ -28,6 +29,15 @@ const TAIL_COLOR = "hsl(285 70% 50%)";
 const ZOOM_MIN = 1;
 const ZOOM_MAX = 5;
 const clampZoom = (z) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 100) / 100));
+const MIN_BOX = 0.005;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+// The four corners of a box being resized: where the handle sits, how it drags.
+const HANDLES = [
+  ["nw", "-left-1.5 -top-1.5 cursor-nwse-resize"],
+  ["ne", "-right-1.5 -top-1.5 cursor-nesw-resize"],
+  ["sw", "-bottom-1.5 -left-1.5 cursor-nesw-resize"],
+  ["se", "-bottom-1.5 -right-1.5 cursor-nwse-resize"],
+];
 const pct = (n) => (n == null ? "" : `${Math.round(n * 100)}%`);
 
 // Hide a text: every character but whitespace becomes "*", so lengths and
@@ -82,6 +92,10 @@ export function PageImage({
   drawMode = false,
   onDraw,
   onDeleteDrawn,
+  editMode = false,
+  onMoveBox,
+  overridden,
+  onResetBox,
 }) {
   const { t } = useI18n();
   const { url, error, loading } = usePageImage(page.image);
@@ -90,6 +104,18 @@ export function PageImage({
   // 1 = the page fits the width; above, the page is wider and scrolls.
   const [zoom, setZoom] = useState(1);
   const scroller = useRef(null);
+  const pageRef = useRef(null);
+  // Fix mode: the box picked, the gesture on it (move or one corner) and the
+  // place it is being dragged to, in fractions of the page.
+  const [selected, setSelected] = useState(null);
+  const [live, setLive] = useState(null);
+  const gesture = useRef(null);
+  const liveBox = useRef(null);
+  useEffect(() => {
+    if (!editMode) setSelected(null);
+  }, [editMode]);
+  useEffect(() => setSelected(null), [page.number]);
+  const place = (key, b) => (live?.key === key ? live.box : b);
 
   // Ctrl/Cmd + wheel zooms toward the cursor (a plain wheel still scrolls).
   useEffect(() => {
@@ -127,6 +153,7 @@ export function PageImage({
     height: Math.abs(a.y - b.y),
   });
   const startDraw = (e) => {
+    if (editMode && e.target === e.currentTarget) setSelected(null);
     if (!drawMode || e.target !== e.currentTarget) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     setDraft({ from: point(e), to: point(e) });
@@ -138,6 +165,52 @@ export function PageImage({
     setDraft(null);
     // A click, not a drag: ignore it.
     if (box.width > 0.005 && box.height > 0.005) onDraw?.(box, url);
+  };
+
+  const pageXY = (e) => {
+    const r = pageRef.current.getBoundingClientRect();
+    return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+  };
+  // mode: "move", or the corner being dragged ("nw", "ne", "sw", "se").
+  const beginEdit = (e, key, target, box, mode) => {
+    if (!editMode) return;
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setSelected(key);
+    gesture.current = { key, target, mode, from: pageXY(e), box0: box };
+  };
+  const moveEdit = (e) => {
+    const g = gesture.current;
+    if (!g) return;
+    const p = pageXY(e);
+    const dx = p.x - g.from.x;
+    const dy = p.y - g.from.y;
+    const b = g.box0;
+    let [x1, y1, x2, y2] = [b.x, b.y, b.x + b.width, b.y + b.height];
+    if (g.mode === "move") {
+      x1 = clamp(b.x + dx, 0, 1 - b.width);
+      y1 = clamp(b.y + dy, 0, 1 - b.height);
+      x2 = x1 + b.width;
+      y2 = y1 + b.height;
+    } else {
+      if (g.mode.includes("w")) x1 = clamp(x1 + dx, 0, x2 - MIN_BOX);
+      else x2 = clamp(x2 + dx, x1 + MIN_BOX, 1);
+      if (g.mode.includes("n")) y1 = clamp(y1 + dy, 0, y2 - MIN_BOX);
+      else y2 = clamp(y2 + dy, y1 + MIN_BOX, 1);
+    }
+    liveBox.current = { x: x1, y: y1, width: x2 - x1, height: y2 - y1 };
+    setLive({ key: g.key, box: liveBox.current });
+  };
+  const endEdit = () => {
+    const g = gesture.current;
+    const box = liveBox.current;
+    gesture.current = null;
+    liveBox.current = null;
+    setLive(null);
+    // A click, not a drag: the box is only selected.
+    if (!g || !box) return;
+    const moved = ["x", "y", "width", "height"].some((k) => Math.abs(box[k] - g.box0[k]) > 0.0005);
+    if (moved) onMoveBox?.(g.target, box);
   };
 
   if (loading)
@@ -204,11 +277,19 @@ export function PageImage({
         )}
       >
     <div
+      ref={pageRef}
       className={cn("relative", drawMode && "cursor-crosshair touch-none")}
       style={{ width: `${zoom * 100}%` }}
       onPointerDown={startDraw}
-      onPointerMove={moveDraw}
-      onPointerUp={endDraw}
+      onPointerMove={(e) => {
+        moveDraw(e);
+        moveEdit(e);
+      }}
+      onPointerUp={(e) => {
+        endDraw(e);
+        endEdit();
+      }}
+      onPointerCancel={endEdit}
     >
       <img
         src={url}
@@ -216,23 +297,41 @@ export function PageImage({
         className="pointer-events-none block w-full select-none"
         draggable={false}
       />
-      {drawn.map((b) => (
-        <button
-          type="button"
-          key={b.id}
-          title={[b.label, drawMode && t("run.doc.removeBox")].filter(Boolean).join(" · ")}
-          disabled={!drawMode}
-          onClick={() => onDeleteDrawn?.(b.id)}
-          className="absolute border-2 border-neutral-900 bg-neutral-900/35 disabled:cursor-default"
-          style={{
-            ...(b.label ? { borderColor: colorFor(b.label) } : {}),
-            left: `${b.x * 100}%`,
-            top: `${b.y * 100}%`,
-            width: `${b.width * 100}%`,
-            height: `${b.height * 100}%`,
-          }}
-        />
-      ))}
+      {drawn.map((row) => {
+        const key = `d:${row.id}`;
+        const b = place(key, row);
+        return (
+          <button
+            type="button"
+            key={row.id}
+            title={[row.label, drawMode && t("run.doc.removeBox")].filter(Boolean).join(" · ")}
+            disabled={!drawMode && !editMode}
+            onClick={() => drawMode && onDeleteDrawn?.(row.id)}
+            onPointerDown={(e) => beginEdit(e, key, { kind: "drawn", id: row.id }, row, "move")}
+            className={cn(
+              "absolute border-2 border-neutral-900 bg-neutral-900/35 disabled:cursor-default",
+              editMode && "cursor-move touch-none",
+              selected === key && "z-20 ring-2 ring-primary ring-offset-1"
+            )}
+            style={{
+              ...(row.label ? { borderColor: colorFor(row.label) } : {}),
+              left: `${b.x * 100}%`,
+              top: `${b.y * 100}%`,
+              width: `${b.width * 100}%`,
+              height: `${b.height * 100}%`,
+            }}
+          >
+            {selected === key &&
+              HANDLES.map(([mode, pos]) => (
+                <span
+                  key={mode}
+                  onPointerDown={(e) => beginEdit(e, key, { kind: "drawn", id: row.id }, row, mode)}
+                  className={cn("absolute h-3 w-3 rounded-[2px] border-2 border-primary bg-background", pos)}
+                />
+              ))}
+          </button>
+        );
+      })}
       {draft && (
         <div
           className="pointer-events-none absolute border-2 border-dashed border-neutral-900 bg-neutral-900/20"
@@ -245,32 +344,84 @@ export function PageImage({
         />
       )}
       {items.flatMap((h) =>
-        h.bboxes.map((b, i) => (
-          <button
-            type="button"
-            key={`${h.id}-${i}`}
-            title={h.title}
-            onMouseEnter={() => onActive(h.id)}
-            onMouseLeave={() => onActive(null)}
-            className={cn(
-              "absolute rounded-[2px] border-2 transition-all",
-              h.kind === "relation" && "border-dashed",
-              activeId === h.id && "z-10 ring-2 ring-offset-1"
-            )}
-            style={{
-              left: `${b.x * 100}%`,
-              top: `${b.y * 100}%`,
-              width: `${b.width * 100}%`,
-              height: `${b.height * 100}%`,
-              borderColor: h.color,
-              backgroundColor: `color-mix(in srgb, ${h.color} ${
-                activeId === h.id ? 35 : 15
-              }%, transparent)`,
-              "--tw-ring-color": h.color,
-            }}
-          />
-        ))
+        h.bboxes.map((original, i) => {
+          const editable = editMode && h.kind === "entity";
+          const key = `e:${h.id}-${i}`;
+          const b = place(key, original);
+          const target = { kind: "entity", entityId: h.id, index: i };
+          const fixed = overridden?.has(overrideKey(page.number, h.id, i));
+          // The text that will replace it on export: shown in place, black on white.
+          const preview = h.replacement && !editMode;
+          return (
+            <button
+              type="button"
+              key={`${h.id}-${i}`}
+              title={h.title}
+              onMouseEnter={() => onActive(h.id)}
+              onMouseLeave={() => onActive(null)}
+              onPointerDown={editable ? (e) => beginEdit(e, key, target, original, "move") : undefined}
+              className={cn(
+                "absolute flex items-center justify-center rounded-[2px] border-2 transition-all",
+                h.kind === "relation" && "border-dashed",
+                editable && "cursor-move touch-none transition-none",
+                editMode && !editable && "pointer-events-none",
+                preview && "overflow-hidden border-black bg-white text-black",
+                activeId === h.id && "z-10 ring-2 ring-offset-1",
+                selected === key && "z-20 ring-2 ring-offset-1"
+              )}
+              style={{
+                left: `${b.x * 100}%`,
+                top: `${b.y * 100}%`,
+                width: `${b.width * 100}%`,
+                height: `${b.height * 100}%`,
+                borderColor: preview ? undefined : h.color,
+                backgroundColor: preview
+                  ? undefined
+                  : `color-mix(in srgb, ${h.color} ${activeId === h.id ? 35 : 15}%, transparent)`,
+                "--tw-ring-color": h.color,
+                fontSize: `${Math.max(9, 11 * zoom)}px`,
+              }}
+            >
+              {preview && <span className="truncate px-0.5 font-semibold leading-none">{h.replacement}</span>}
+              {editable && selected === key && (
+                <>
+                  {HANDLES.map(([mode, pos]) => (
+                    <span
+                      key={mode}
+                      onPointerDown={(e) => beginEdit(e, key, target, original, mode)}
+                      className={cn("absolute h-3 w-3 rounded-[2px] border-2 bg-background", pos)}
+                      style={{ borderColor: h.color }}
+                    />
+                  ))}
+                </>
+              )}
+            </button>
+          );
+        })
       )}
+      {editMode &&
+        items.flatMap((h) =>
+          h.bboxes.map((original, i) => {
+            const key = `e:${h.id}-${i}`;
+            if (selected !== key || !overridden?.has(overrideKey(page.number, h.id, i))) return null;
+            const b = place(key, original);
+            return (
+              <span
+                key={`reset-${key}`}
+                role="button"
+                title={t("run.doc.resetBox")}
+                onPointerDown={(e) => {
+                  e.stopPropagation();
+                  onResetBox?.(h.id, i);
+                }}
+                className="absolute z-30 cursor-pointer rounded bg-foreground px-1.5 py-0.5 text-[10px] text-background"
+                style={{ left: `${b.x * 100}%`, top: `calc(${b.y * 100}% - 22px)` }}
+              >
+                ↺ {t("run.doc.resetBox")}
+              </span>
+            );
+          })
+        )}
     </div>
       </div>
       <p className="text-xs text-muted-foreground">{t("run.doc.zoomHint")}</p>

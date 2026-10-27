@@ -337,6 +337,40 @@ export const addPageBbox = (runId, box) =>
 export const deletePageBbox = (runId, bboxId) =>
   bboxRequest(runId, `/${bboxId}`, { method: "DELETE" });
 
+export const movePageBbox = (runId, bboxId, box) =>
+  bboxRequest(runId, `/${bboxId}`, { method: "PATCH", body: JSON.stringify(box) });
+
+// What a user changes on a run on top of what the workers found: the text to
+// write instead of every entity that reads the same, and corrected boxes.
+async function editRequest(runId, what, path = "", init = {}) {
+  const res = await fetch(`${API_V1}/tasks/${runId}/${what}${path}`, {
+    credentials: "include",
+    ...init,
+    headers: {
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...(DEV_SERVICE_TOKEN ? { Authorization: `Bearer ${DEV_SERVICE_TOKEN}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const error = new Error(`${res.status} ${res.statusText}`);
+    error.status = res.status;
+    throw error;
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+export const listReplacements = (runId) => editRequest(runId, "replacements");
+export const setReplacement = (runId, text, replacement) =>
+  editRequest(runId, "replacements", "", {
+    method: "PUT",
+    body: JSON.stringify({ text, replacement }),
+  });
+export const listBoxOverrides = (runId) => editRequest(runId, "box-overrides");
+export const setBoxOverride = (runId, override) =>
+  editRequest(runId, "box-overrides", "", { method: "PUT", body: JSON.stringify(override) });
+export const deleteBoxOverride = (runId, id) =>
+  editRequest(runId, "box-overrides", `/${id}`, { method: "DELETE" });
+
 // Export the pages of a finished file run: blurred entities, boxes, labels,
 // as PNG (one page), ZIP or PDF (every page). Returns a blob URL the caller
 // revokes after the download.

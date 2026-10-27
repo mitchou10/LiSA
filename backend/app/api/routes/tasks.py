@@ -7,12 +7,21 @@ from app.api.deps import AdminDep, CurrentUserDep, SessionDep, TaskServiceDep
 from app.core import storage
 from app.models.enums import TaskStatus
 from app.models.page_bbox import PageBbox
+from app.models.box_override import BoxOverride
+from app.models.text_replacement import TextReplacement, replacement_key
 from app.repositories.page_bbox import PageBboxRepository
+from app.repositories.run_edit import BoxOverrideRepository, TextReplacementRepository
 from app.schemas.auth import CurrentUser
-from app.schemas.page_bbox import PageBboxCreate, PageBboxRead
+from app.schemas.page_bbox import BoxGeometry, PageBboxCreate, PageBboxRead
 from app.schemas.pagination import Page
 from app.schemas.render import RenderRequest
 from app.schemas.run import DefaultRunCreate, RunRead
+from app.schemas.run_edit import (
+    BoxOverrideRead,
+    BoxOverrideSet,
+    ReplacementRead,
+    ReplacementSet,
+)
 from app.schemas.task import TaskRead, TaskStatusRead, TaskSubmit, TaskUpdate
 from app.services.render import RenderError, RenderService
 from app.services.run import RunService
@@ -247,6 +256,126 @@ async def delete_page_bbox(
     if bbox is None or bbox.run_id != task_id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Box not found.")
     await repo.delete(bbox)
+    await session.commit()
+
+
+@router.patch("/{task_id}/bboxes/{bbox_id}", response_model=PageBboxRead)
+async def move_page_bbox(
+    task_id: UUID,
+    bbox_id: UUID,
+    payload: BoxGeometry,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> PageBbox:
+    """Move or resize a box drawn on a page."""
+    await _own_run(service, user, task_id)
+    bbox = await PageBboxRepository(session).get(bbox_id)
+    if bbox is None or bbox.run_id != task_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Box not found.")
+    for name, value in payload.model_dump().items():
+        setattr(bbox, name, value)
+    await session.commit()
+    await session.refresh(bbox)
+    return bbox
+
+
+@router.get("/{task_id}/replacements", response_model=list[ReplacementRead])
+async def list_replacements(
+    task_id: UUID,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> list[TextReplacement]:
+    """The texts to write instead of the entities that read the same."""
+    await _own_run(service, user, task_id)
+    return await TextReplacementRepository(session).list_for_run(task_id)
+
+
+@router.put("/{task_id}/replacements", response_model=ReplacementRead)
+async def set_replacement(
+    task_id: UUID,
+    payload: ReplacementSet,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> ReplacementRead:
+    """Set (or, when empty, remove) the replacement of every entity reading ``text``."""
+    await _own_run(service, user, task_id)
+    repo = TextReplacementRepository(session)
+    key = replacement_key(payload.text)
+    row = await repo.find(task_id, key)
+    value = payload.replacement.strip()
+    if not value:
+        if row is not None:
+            await repo.delete(row)
+    elif row is None:
+        await repo.add(
+            TextReplacement(
+                run_id=task_id, key=key, replacement=value, created_by=user.id
+            )
+        )
+    else:
+        row.replacement = value
+    await session.commit()
+    return ReplacementRead(key=key, replacement=value)
+
+
+@router.get("/{task_id}/box-overrides", response_model=list[BoxOverrideRead])
+async def list_box_overrides(
+    task_id: UUID,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> list[BoxOverride]:
+    """The corrected boxes of the detected entities of a run."""
+    await _own_run(service, user, task_id)
+    return await BoxOverrideRepository(session).list_for_run(task_id)
+
+
+@router.put("/{task_id}/box-overrides", response_model=BoxOverrideRead)
+async def set_box_override(
+    task_id: UUID,
+    payload: BoxOverrideSet,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> BoxOverride:
+    """Correct one box of a detected entity (the detection itself is kept)."""
+    await _own_run(service, user, task_id)
+    repo = BoxOverrideRepository(session)
+    row = await repo.find(
+        task_id, payload.page_number, payload.entity_id, payload.bbox_index
+    )
+    if row is None:
+        row = await repo.add(
+            BoxOverride(run_id=task_id, created_by=user.id, **payload.model_dump())
+        )
+    else:
+        for name in ("x", "y", "width", "height"):
+            setattr(row, name, getattr(payload, name))
+    await session.commit()
+    await session.refresh(row)
+    return row
+
+
+@router.delete(
+    "/{task_id}/box-overrides/{override_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_box_override(
+    task_id: UUID,
+    override_id: UUID,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> None:
+    """Put a corrected box back to what was detected."""
+    await _own_run(service, user, task_id)
+    repo = BoxOverrideRepository(session)
+    row = await repo.get(override_id)
+    if row is None or row.run_id != task_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Box not found.")
+    await repo.delete(row)
     await session.commit()
 
 

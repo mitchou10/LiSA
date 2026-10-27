@@ -1,3 +1,4 @@
+from app.models.box_override import BoxOverride
 from app.models.catalog import (
     ClassificationDefinition,
     ClassificationLabel,
@@ -13,9 +14,11 @@ from app.models.page_bbox import PageBbox
 from app.models.project import Project
 from app.models.service import Service
 from app.models.task import Task
+from app.models.text_replacement import TextReplacement
 
 __all__ = [
     "Action",
+    "BoxOverride",
     "ClassificationDefinition",
     "ClassificationLabel",
     "DetectionProfile",
@@ -32,5 +35,6 @@ __all__ = [
     "StoredFile",
     "Task",
     "TaskStatus",
+    "TextReplacement",
     "UserRole",
 ]
