@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.0](https://github.com/mitchou10/LiSA/compare/v1.3.5...v1.4.0) (2026-10-27)
+
+
+### Features
+
+* **backend:** draw boxes on run pages, stored and blurred on export ([4c9d116](https://github.com/mitchou10/LiSA/commit/4c9d116f3992867f46d960ab4dabd8f0df944deb))
+* **frontend:** draw boxes on a page to blur them on export ([6459244](https://github.com/mitchou10/LiSA/commit/6459244b7b85ccaf78be65f4500d45c8a16f43c8))
+* **frontend:** pick a label for a drawn box in a modal with the crop ([f550ef9](https://github.com/mitchou10/LiSA/commit/f550ef901678e7bd68acce2e75a8f418a3f636fc))
+
+
+### Bug Fixes
+
+* **helm:** use helper.fullname for worker backend URLs ([46c2f13](https://github.com/mitchou10/LiSA/commit/46c2f13216d7a1a6703065db2b46c6b70c118c96))
+
 ## [1.3.5](https://github.com/mitchou10/LiSA/compare/v1.3.4...v1.3.5) (2026-10-26)
 
 
