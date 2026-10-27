@@ -188,7 +188,7 @@ export default function DashboardPage() {
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
               aria-label={t("dashboard.project")}
-              className="h-10 rounded-md border border-input bg-background/60 px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="h-10 rounded-md border border-input bg-background/60 px-2 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
             >
               <option value="">{t("dashboard.project.all")}</option>
               {projects.map((p) => (
@@ -208,7 +208,7 @@ export default function DashboardPage() {
                 className={cn(
                   "rounded-md px-3 py-1.5 text-sm font-medium transition-all",
                   days === r.days
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-background text-foreground shadow-xs"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >

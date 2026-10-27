@@ -52,7 +52,7 @@ export default function UserMenu() {
         className="inline-flex items-center gap-2 rounded-lg border border-border px-2.5 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted"
       >
         <UserCircle className="h-4 w-4 text-muted-foreground" />
-        <span className="max-w-[10rem] truncate">{user?.username}</span>
+        <span className="max-w-40 truncate">{user?.username}</span>
         <ChevronDown
           className={cn(
             "h-3.5 w-3.5 text-muted-foreground transition-transform",

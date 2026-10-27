@@ -22,7 +22,7 @@ export const PRESET_LABELS = [
 ];
 
 const selectClass =
-  "h-10 w-full rounded-md border border-input bg-background/60 px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "h-10 w-full rounded-md border border-input bg-background/60 px-2 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
 
 function Check({ checked, onChange, children }) {
   return (
@@ -100,7 +100,7 @@ function NewProject({ value, onChange, t }) {
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <label className="text-sm font-medium" htmlFor="new-project-name">
+        <label className="block text-sm font-medium" htmlFor="new-project-name">
           {t("wiz.new.name")}
         </label>
         <Input

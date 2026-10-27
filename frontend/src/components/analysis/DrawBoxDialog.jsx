@@ -56,7 +56,7 @@ export default function DrawBoxDialog({ pending, labels, onSave, onCancel }) {
           <canvas ref={canvas} className="max-h-48 max-w-full object-contain" />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium" htmlFor="draw-label">
+          <label className="block text-sm font-medium" htmlFor="draw-label">
             {t("run.doc.drawLabel")}
           </label>
           {labels.length > 0 && (

@@ -84,7 +84,7 @@ export default function DocumentResultView({ result, onBboxDecision, onAddBbox, 
           </div>
           {result?.metadata?.mock && <Badge variant="muted">mock</Badge>}
           {page.filename && (
-            <Badge variant="muted" className="max-w-[12rem] truncate">
+            <Badge variant="muted" className="max-w-48 truncate">
               {page.filename}
             </Badge>
           )}
@@ -336,7 +336,7 @@ function BboxCanvas({
         role="application"
         aria-label={t("results.pagePlaceholder").replace("{n}", page.page_number)}
         tabIndex={0}
-        className="relative mx-auto bg-white shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="relative mx-auto bg-white shadow-md focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
         style={{
           width: "100%",
           maxWidth: `${page.width}px`,
@@ -385,7 +385,7 @@ function BboxCanvas({
                 }
               }}
               className={cn(
-                "absolute border-2 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "absolute border-2 transition-all focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
                 isRejected && "opacity-40",
                 !drawMode && "cursor-pointer hover:brightness-110"
               )}

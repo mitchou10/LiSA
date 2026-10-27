@@ -138,7 +138,7 @@ function TaskNode({ task, byId, depth, onRevoke, onRetry, onDelete }) {
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
-              className="rounded p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="rounded-[0.25rem] p-0.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               aria-label={open ? t("task.collapse") : t("task.expand")}
             >
               <ChevronRight
@@ -153,7 +153,7 @@ function TaskNode({ task, byId, depth, onRevoke, onRetry, onDelete }) {
           )}
           <StatusIcon status={task.status} />
           <span className="font-mono text-sm font-medium">{task.id}</span>
-          <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+          <code className="rounded-[0.25rem] bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
             {task.route}
           </code>
           <Badge variant="muted">{task.service}</Badge>
@@ -259,7 +259,7 @@ function ServiceCard({ svc, onClick }) {
         <div className="flex items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-2 font-medium">
             <span className="truncate">{svc.name}</span>
-            <code className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+            <code className="shrink-0 rounded-[0.25rem] bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
               v{svc.version}
             </code>
           </span>
@@ -309,7 +309,7 @@ function ServiceDialog({ svc, open, onClose }) {
           <Badge variant={SERVICE_TYPE_VARIANT[svc.type] ?? "muted"}>
             {t(`service.type.${svc.type}`)}
           </Badge>
-          <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+          <code className="rounded-[0.25rem] bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
             v{svc.version}
           </code>
         </div>
@@ -375,7 +375,7 @@ function FilterSelect({ value, onChange, ariaLabel, children }) {
       aria-label={ariaLabel}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="h-9 rounded-md border border-input bg-transparent px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+      className="h-9 rounded-md border border-input bg-transparent px-2 text-sm text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
     >
       {children}
     </select>

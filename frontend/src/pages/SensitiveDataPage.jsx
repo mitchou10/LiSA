@@ -25,7 +25,7 @@ const SEVERITIES = ["low", "medium", "high"];
 const ACTIONS = ["allow", "redact", "block"];
 
 const selectClass =
-  "h-9 rounded-md border border-input bg-background/60 px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60";
+  "h-9 rounded-md border border-input bg-background/60 px-2 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60";
 
 // Stable comparison of a config (ignores nothing: any field change counts).
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
