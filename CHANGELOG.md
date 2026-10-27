@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.1](https://github.com/mitchou10/LiSA/compare/v1.5.0...v1.5.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* allow blurring any area, not tied to an entity or label ([ac85445](https://github.com/mitchou10/LiSA/commit/ac85445085c675c2c4f223cf947d5e06c4f48ddc))
+
 ## [1.5.0](https://github.com/mitchou10/LiSA/compare/v1.4.0...v1.5.0) (2026-10-27)
 
 
