@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/mitchou10/LiSA/compare/v1.4.0...v1.5.0) (2026-10-27)
+
+
+### Features
+
+* **frontend:** add zoom to the page image when annotating ([#93](https://github.com/mitchou10/LiSA/issues/93)) ([bede103](https://github.com/mitchou10/LiSA/commit/bede103309bc83edb743dad8f5c476171220411b))
+
 ## [1.4.0](https://github.com/mitchou10/LiSA/compare/v1.3.5...v1.4.0) (2026-10-27)
 
 
