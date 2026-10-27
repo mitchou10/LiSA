@@ -10,7 +10,7 @@ const SEVERITIES = ["low", "medium", "high"];
 const ACTIONS = ["allow", "redact", "block"];
 
 const selectClass =
-  "h-10 w-full rounded-md border border-input bg-background/60 px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "h-10 w-full rounded-md border border-input bg-background/60 px-2 text-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring";
 
 // The field that names a definition: entities have a label, the rest a name.
 export const nameField = (kind) => (kind === "entities" ? "label" : "name");
@@ -81,7 +81,7 @@ function toPayload(kind, form) {
 function Field({ label, hint, children }) {
   return (
     <label className="block space-y-1">
-      <span className="text-sm font-medium">{label}</span>
+      <span className="block text-sm font-medium">{label}</span>
       {children}
       {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
     </label>

@@ -70,7 +70,7 @@ export default function ProjectsPage() {
         <CardContent>
           <form className="flex flex-wrap items-end gap-3" onSubmit={create}>
             <label className="space-y-1">
-              <span className="text-sm font-medium">{t("projects.field.projectName")}</span>
+              <span className="block text-sm font-medium">{t("projects.field.projectName")}</span>
               <Input
                 className="w-64"
                 value={name}
@@ -79,7 +79,7 @@ export default function ProjectsPage() {
               />
             </label>
             <label className="min-w-64 flex-1 space-y-1">
-              <span className="text-sm font-medium">{t("projects.field.description")}</span>
+              <span className="block text-sm font-medium">{t("projects.field.description")}</span>
               <Input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}

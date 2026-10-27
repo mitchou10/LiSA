@@ -206,7 +206,7 @@ export default function TextResultView({ result, onDecision, onAddSpan, onUpdate
           ref={textRef}
           onMouseUp={handleMouseUp}
           className={cn(
-            "whitespace-pre-wrap break-words text-sm leading-relaxed",
+            "whitespace-pre-wrap wrap-break-word text-sm leading-relaxed",
             annotateMode && "cursor-text"
           )}
         >
@@ -230,7 +230,7 @@ export default function TextResultView({ result, onDecision, onAddSpan, onUpdate
                   }
                 }}
                 className={cn(
-                  "cursor-pointer rounded px-0.5 underline decoration-2 underline-offset-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "cursor-pointer rounded px-0.5 underline decoration-2 underline-offset-2 transition-colors focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
                   SEVERITY_COLOR[s.severity] || SEVERITY_COLOR.low,
                   SEVERITY_UNDERLINE[s.severity] || SEVERITY_UNDERLINE.low,
                   isActive && "ring-2 ring-ring ring-offset-1",

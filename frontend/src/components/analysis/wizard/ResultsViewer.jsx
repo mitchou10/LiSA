@@ -89,7 +89,7 @@ function ExportBar({ run, page, total, checked, t }) {
               onClick={() => setBlur(value)}
               className={cn(
                 "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-                blur === value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                blur === value ? "bg-background text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground"
               )}
             >
               {label}
@@ -222,7 +222,7 @@ export default function ResultsViewer({ run, source }) {
                       onClick={() => setView(v)}
                       className={cn(
                         "rounded-md px-2.5 py-1 font-medium",
-                        view === v ? "bg-background shadow-sm" : "text-muted-foreground"
+                        view === v ? "bg-background shadow-xs" : "text-muted-foreground"
                       )}
                     >
                       {label}

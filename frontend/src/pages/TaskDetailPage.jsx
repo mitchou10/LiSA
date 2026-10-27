@@ -174,7 +174,7 @@ export default function TaskDetailPage() {
         {backLink}
         <span className="font-mono text-sm font-medium">{task.id}</span>
         {routeLabel && (
-          <code className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+          <code className="rounded-[0.25rem] bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
             {routeLabel}
           </code>
         )}
