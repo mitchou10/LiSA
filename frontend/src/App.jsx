@@ -6,10 +6,12 @@ import {
   FolderKanban,
   ClipboardList,
 } from "lucide-react";
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { cn } from "./lib/utils";
 import { useI18n } from "./lib/i18n.jsx";
 import { useAuth } from "./lib/auth.jsx";
+import { UnsavedWorkProvider, useHasUnsavedWork } from "./lib/unsavedWork.jsx";
 import { oidcLoginUrl } from "./lib/api";
 import HealthIndicator from "./components/HealthIndicator";
 import UserMenu from "./components/UserMenu";
@@ -31,8 +33,20 @@ const NAV = [
 ];
 
 export default function App() {
+  return (
+    <UnsavedWorkProvider>
+      <Shell />
+    </UnsavedWorkProvider>
+  );
+}
+
+function Shell() {
   const { t, lang, setLanguage } = useI18n();
   const { isAuthenticated } = useAuth();
+  const { pathname } = useLocation();
+  const hasUnsavedWork = useHasUnsavedWork();
+  // Bumped to remount the page: clicking the tab you are on starts it afresh.
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Everything is gated behind login: only show the nav once authenticated.
   const navItems = isAuthenticated ? NAV : [];
@@ -58,6 +72,10 @@ export default function App() {
                 <NavLink
                   key={item.to}
                   to={item.to}
+                  onClick={() => {
+                    // Already here: reload the page, unless something is in progress.
+                    if (pathname === item.to && !hasUnsavedWork()) setRefreshKey((k) => k + 1);
+                  }}
                   className={({ isActive }) =>
                     cn(
                       "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all",
@@ -105,7 +123,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main key={refreshKey} className="mx-auto max-w-7xl px-6 py-8">
         <Routes>
           <Route path="/" element={<Navigate to="/analysis" replace />} />
           <Route path="/login" element={<LoginPage />} />
