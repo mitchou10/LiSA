@@ -97,9 +97,7 @@ def _font(size: int) -> ImageFont.ImageFont:
         return ImageFont.load_default()
 
 
-def _write_replacement(
-    img: Image.Image, boxes: list[list[float]], text: str
-) -> None:
+def _write_replacement(img: Image.Image, boxes: list[list[float]], text: str) -> None:
     """Black on white, simple: every box is painted white and outlined; the
     text goes in the first one, as large as fits."""
     draw = ImageDraw.Draw(img)
