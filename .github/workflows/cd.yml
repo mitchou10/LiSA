@@ -39,9 +39,10 @@ env:
   # `name:` field (`lisa`), not from this directory name.
   CHARTS_DIR: deploy/helm
   CHART_NAME: lisa
-  # Only the plain-HTTP dependencies need declaring; the cloudpirates charts
-  # are pulled straight from their OCI registry.
-  HELM_REPOS: ""
+  # The cloudpirates charts are pulled straight from their OCI registry,
+  # but the CNPG subchart lives in an HTTPS repo that must be declared for
+  # 'helm dependency update' during release-chart packaging.
+  HELM_REPOS: "cloudnative-pg=https://cloudnative-pg.github.io/charts"
 
 jobs:
   expose-vars:

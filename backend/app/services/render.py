@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import storage
 from app.models.enums import TaskStatus
 from app.models.task import Task
+from app.repositories.page_bbox import PageBboxRepository
 from app.repositories.service import ServiceRepository
 from app.repositories.task import TaskRepository
 from app.schemas.render import RenderedDocument, RenderRequest
@@ -108,6 +109,7 @@ class RenderService:
         self.session = session
         self.tasks = TaskRepository(session)
         self.services = ServiceRepository(session)
+        self.bboxes = PageBboxRepository(session)
 
     async def render(self, run_id: UUID, request: RenderRequest) -> RenderedDocument:
         run = await self.tasks.get(run_id)
@@ -128,9 +130,23 @@ class RenderService:
         pages = [p for p in pages if p.get("page_number") in wanted]
 
         entities = _entities_of(ner)
+        # The boxes users drew: blurred like entities, whatever the selection.
+        drawn: dict[int, list[dict[str, Any]]] = {}
+        for b in await self.bboxes.list_for_run(run_id):
+            drawn.setdefault(b.page_number, []).append(
+                {
+                    "label": b.label or "manual",
+                    "bboxes": [
+                        {"x": b.x, "y": b.y, "width": b.width, "height": b.height}
+                    ],
+                }
+            )
         rendered = [
             await self._render_page(
-                p, entities.get(p.get("page_number")) or [], request
+                p,
+                entities.get(p.get("page_number")) or [],
+                drawn.get(p.get("page_number")) or [],
+                request,
             )
             for p in pages
         ]
@@ -156,6 +172,7 @@ class RenderService:
         self,
         page: dict[str, Any],
         entities: list[dict[str, Any]],
+        drawn: list[dict[str, Any]],
         request: RenderRequest,
     ) -> tuple[int, Image.Image]:
         """One page: the stored screenshot, blurred and annotated as asked."""
@@ -173,19 +190,20 @@ class RenderService:
             return page.get("page_number"), img
 
         if request.blur == "entities" or request.boxes:
-            img = self._annotate(img, entities, page.get("page_number"), request)
+            img = self._annotate(img, entities, drawn, page.get("page_number"), request)
         return page.get("page_number"), img
 
     def _annotate(
         self,
         img: Image.Image,
         entities: list[dict[str, Any]],
+        drawn: list[dict[str, Any]],
         page_number: int,
         request: RenderRequest,
     ) -> Image.Image:
         """Blur and/or box the kept entities, with supervision."""
         keep = _selected(request.entity_ids)
-        kept = [e for e in entities if _keeps(e, page_number, keep)]
+        kept = [e for e in entities if _keeps(e, page_number, keep)] + drawn
         boxes: list[list[float]] = []
         labels: list[str] = []
         for e in kept:

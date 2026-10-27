@@ -6,7 +6,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-ARG VITE_API_URL=http://localhost:8000
+# Public URL of the API, fixed in the bundle at build time. Empty (default): same origin, i.e. the
+# API is served on the same host as the app under /api. Set it when the API lives on another host.
+ARG VITE_API_URL=""
 ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 

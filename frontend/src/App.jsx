@@ -10,12 +10,13 @@ import { NavLink, Navigate, Route, Routes } from "react-router-dom";
 import { cn } from "./lib/utils";
 import { useI18n } from "./lib/i18n.jsx";
 import { useAuth } from "./lib/auth.jsx";
+import { oidcLoginUrl } from "./lib/api";
 import HealthIndicator from "./components/HealthIndicator";
 import UserMenu from "./components/UserMenu";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AnalysisPage from "./pages/AnalysisPage";
 import ServicesPage from "./pages/ServicesPage";
-import TaskDetailPage from "./pages/TaskDetailPage";
+import RunPage from "./pages/RunPage";
 import DashboardPage from "./pages/DashboardPage";
 import SensitiveDataPage from "./pages/SensitiveDataPage";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -86,13 +87,18 @@ export default function App() {
           {isAuthenticated ? (
             <UserMenu />
           ) : (
-            <NavLink
-              to="/login"
+            // Straight to Keycloak: a link to /login did nothing on /login itself,
+            // which is where an unauthenticated visitor already is.
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = oidcLoginUrl("/dashboard");
+              }}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               <LogIn className="h-4 w-4" />
               {t("auth.login")}
-            </NavLink>
+            </button>
           )}
 
           <HealthIndicator />
@@ -131,7 +137,7 @@ export default function App() {
             path="/analysis/:taskId"
             element={
               <ProtectedRoute>
-                <TaskDetailPage />
+                <RunPage />
               </ProtectedRoute>
             }
           />

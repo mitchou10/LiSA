@@ -23,15 +23,18 @@ present in the same secret so every consumer gets what it needs.
 
 | Key | Example | Consumed by |
 |---|---|---|
-| `S3_ENDPOINT_URL` | `http://rustfs:9000` | backend, parser, image-classification |
+| `S3_ENDPOINT_URL` | `http://lisa-rustfs:9000` | backend, parser, image-classification |
 | `S3_ACCESS_KEY` | `rustfsadmin` | backend, parser, image-classification |
 | `S3_SECRET_KEY` | `rustfsadmin` | backend, parser, image-classification |
 | `S3_BUCKET` | `lisa-files` | backend, parser, image-classification |
 | `S3_REGION` | `us-east-1` | backend, parser, image-classification |
-| `AWS_S3_ENDPOINT_URL` | `http://rustfs:9000` | anonymize |
+| `AWS_S3_ENDPOINT_URL` | `http://lisa-rustfs:9000` | anonymize |
 | `AWS_ACCESS_KEY_ID` | `rustfsadmin` | anonymize |
 | `AWS_SECRET_ACCESS_KEY` | `rustfsadmin` | anonymize |
 | `AWS_S3_BUCKET` | `lisa-files` | anonymize |
+
+> RustFS itself reads its root credentials from this secret (`S3_ACCESS_KEY` /
+> `S3_SECRET_KEY`), so you choose them here and nowhere else.
 
 > `S3_REGION` / `AWS_S3_REGION` are set as plain `env` in the chart
 > (`us-east-1`), not from the secret — but having them in Vault too is fine.
@@ -178,12 +181,12 @@ KV="${PROJECT}"
 
 # S3 / RustFS
 vault kv put "${KV}/${ENV}/lisa/s3" \
-  S3_ENDPOINT_URL="http://rustfs:9000" \
+  S3_ENDPOINT_URL="http://lisa-rustfs:9000" \
   S3_ACCESS_KEY="rustfsadmin" \
   S3_SECRET_KEY="rustfsadmin" \
   S3_BUCKET="lisa-files" \
   S3_REGION="us-east-1" \
-  AWS_S3_ENDPOINT_URL="http://rustfs:9000" \
+  AWS_S3_ENDPOINT_URL="http://lisa-rustfs:9000" \
   AWS_ACCESS_KEY_ID="rustfsadmin" \
   AWS_SECRET_ACCESS_KEY="rustfsadmin" \
   AWS_S3_BUCKET="lisa-files"
