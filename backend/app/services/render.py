@@ -14,13 +14,15 @@ from uuid import UUID
 
 import numpy as np
 import supervision as sv
-from PIL import Image, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import storage
 from app.models.enums import TaskStatus
 from app.models.task import Task
+from app.models.text_replacement import replacement_key
 from app.repositories.page_bbox import PageBboxRepository
+from app.repositories.run_edit import BoxOverrideRepository, TextReplacementRepository
 from app.repositories.service import ServiceRepository
 from app.repositories.task import TaskRepository
 from app.schemas.render import RenderedDocument, RenderRequest
@@ -68,6 +70,68 @@ def _entities_of(task: Task) -> dict[int, list[dict[str, Any]]]:
     return out
 
 
+def _with_overrides(
+    entities: dict[int, list[dict[str, Any]]],
+    overrides: dict[tuple[int, str, int], dict[str, float]],
+) -> dict[int, list[dict[str, Any]]]:
+    """The entities, with the boxes users corrected in place of the detected ones."""
+    if not overrides:
+        return entities
+    out: dict[int, list[dict[str, Any]]] = {}
+    for number, items in entities.items():
+        fixed = []
+        for e in items:
+            boxes = [
+                overrides.get((number, e.get("id"), i), b)
+                for i, b in enumerate(e.get("bboxes") or [])
+            ]
+            fixed.append({**e, "bboxes": boxes})
+        out[number] = fixed
+    return out
+
+
+def _font(size: int) -> ImageFont.ImageFont:
+    try:
+        return ImageFont.load_default(size=size)
+    except TypeError:  # an old Pillow: only the fixed-size font
+        return ImageFont.load_default()
+
+
+def _write_replacement(
+    img: Image.Image, boxes: list[list[float]], text: str
+) -> None:
+    """Black on white, simple: every box is painted white and outlined; the
+    text goes in the first one, as large as fits."""
+    draw = ImageDraw.Draw(img)
+    for x1, y1, x2, y2 in boxes:
+        draw.rectangle(
+            [x1, y1, x2, y2],
+            fill="white",
+            outline="black",
+            width=max(1, int((y2 - y1) // 14)),
+        )
+    x1, y1, x2, y2 = boxes[0]
+    pad = 3
+    size = max(8, int((y2 - y1) * 0.7))
+    font = _font(size)
+    while size > 8:
+        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+        if right - left <= (x2 - x1) - 2 * pad:
+            break
+        size -= 1
+        font = _font(size)
+    left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
+    draw.text(
+        (
+            x1 + ((x2 - x1) - (right - left)) / 2 - left,
+            y1 + ((y2 - y1) - (bottom - top)) / 2 - top,
+        ),
+        text,
+        fill="black",
+        font=font,
+    )
+
+
 def _selected(entity_ids: list[str] | None) -> set[str] | None:
     """The ids to keep, as "page:entity" pairs.
 
@@ -110,6 +174,8 @@ class RenderService:
         self.tasks = TaskRepository(session)
         self.services = ServiceRepository(session)
         self.bboxes = PageBboxRepository(session)
+        self.replacements = TextReplacementRepository(session)
+        self.overrides = BoxOverrideRepository(session)
 
     async def render(self, run_id: UUID, request: RenderRequest) -> RenderedDocument:
         run = await self.tasks.get(run_id)
@@ -129,7 +195,21 @@ class RenderService:
             raise RenderError("PNG export takes exactly one page number.")
         pages = [p for p in pages if p.get("page_number") in wanted]
 
-        entities = _entities_of(ner)
+        corrected = {
+            (o.page_number, o.entity_id, o.bbox_index): {
+                "x": o.x,
+                "y": o.y,
+                "width": o.width,
+                "height": o.height,
+            }
+            for o in await self.overrides.list_for_run(run_id)
+        }
+        entities = _with_overrides(_entities_of(ner), corrected)
+        texts = (
+            {r.key: r.replacement for r in await self.replacements.list_for_run(run_id)}
+            if request.replace
+            else {}
+        )
         # The boxes users drew: blurred like entities, whatever the selection.
         drawn: dict[int, list[dict[str, Any]]] = {}
         for b in await self.bboxes.list_for_run(run_id):
@@ -147,6 +227,7 @@ class RenderService:
                 entities.get(p.get("page_number")) or [],
                 drawn.get(p.get("page_number")) or [],
                 request,
+                texts,
             )
             for p in pages
         ]
@@ -174,6 +255,7 @@ class RenderService:
         entities: list[dict[str, Any]],
         drawn: list[dict[str, Any]],
         request: RenderRequest,
+        texts: dict[str, str],
     ) -> tuple[int, Image.Image]:
         """One page: the stored screenshot, blurred and annotated as asked."""
         try:
@@ -190,7 +272,9 @@ class RenderService:
             return page.get("page_number"), img
 
         if request.blur == "entities" or request.boxes:
-            img = self._annotate(img, entities, drawn, page.get("page_number"), request)
+            img = self._annotate(
+                img, entities, drawn, page.get("page_number"), request, texts
+            )
         return page.get("page_number"), img
 
     def _annotate(
@@ -200,8 +284,9 @@ class RenderService:
         drawn: list[dict[str, Any]],
         page_number: int,
         request: RenderRequest,
+        texts: dict[str, str],
     ) -> Image.Image:
-        """Blur and/or box the kept entities, with supervision."""
+        """Blur, replace and/or box the kept entities, with supervision."""
         keep = _selected(request.entity_ids)
         kept = (
             [e for e in entities if _keeps(e, page_number, keep)]
@@ -210,10 +295,20 @@ class RenderService:
         ) + drawn
         boxes: list[list[float]] = []
         labels: list[str] = []
+        # The entities with a replacement are written over, not blurred.
+        replaced: list[tuple[list[list[float]], str]] = []
+        blurred: list[bool] = []
         for e in kept:
-            for box in _pixel_boxes(e, img.size):
+            text = None
+            if request.blur == "entities":
+                text = texts.get(replacement_key(e.get("text") or ""))
+            own = _pixel_boxes(e, img.size)
+            if text and own:
+                replaced.append((own, text))
+            for box in own:
                 boxes.append(box)
                 labels.append(e.get("label", ""))
+                blurred.append(not text)
         if not boxes:
             return img
 
@@ -229,10 +324,15 @@ class RenderService:
             class_id=np.array([class_of[l] for l in labels], dtype=int),
         )
         scene = np.array(img)
-        if request.blur == "entities":
+        if request.blur == "entities" and any(blurred):
             scene = sv.BlurAnnotator(kernel_size=25).annotate(
-                scene=scene, detections=detections
+                scene=scene, detections=detections[np.array(blurred)]
             )
+        if replaced:
+            out = Image.fromarray(scene)
+            for own, text in replaced:
+                _write_replacement(out, own, text)
+            scene = np.array(out)
         if request.boxes:
             scene = sv.BoxAnnotator(color=palette).annotate(
                 scene=scene, detections=detections

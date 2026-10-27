@@ -26,6 +26,8 @@ class RenderRequest(BaseModel):
     ``blur``: nothing, the entities' boxes, or the whole page.
     ``entities``: False leaves the entities alone (only the boxes users drew
     are blurred); ``entity_ids`` is then ignored.
+    ``replace``: write the run's replacement texts (black on white) in place
+    of the entities that have one, instead of blurring them.
     ``boxes``: draw each kept entity's box with its label above it.
     """
 
@@ -33,6 +35,7 @@ class RenderRequest(BaseModel):
     entity_ids: list[str] | None = None
     entities: bool = True
     blur: BlurMode = "entities"
+    replace: bool = False
     boxes: bool = False
     format: RenderFormat = "png"
 

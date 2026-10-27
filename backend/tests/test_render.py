@@ -439,3 +439,119 @@ async def test_entities_off_blurs_only_the_drawn_boxes(
     img = Image.open(io.BytesIO(resp.content))
     colours = img.crop((40, 40, 240, 70)).getcolors(maxcolors=100000)
     assert colours is None or len(colours) > 1
+
+
+# -- replacement texts and corrected boxes ---------------------------------------
+
+
+def _edit_url(run_id, what, suffix=""):
+    return f"/api/v1/tasks/{run_id}/{what}{suffix}"
+
+
+async def test_a_replacement_covers_every_entity_that_reads_the_same(
+    client, admin_headers, project, sent, objects
+):
+    run_id = await _file_run(client, admin_headers, project, sent)
+    put = await client.put(
+        _edit_url(run_id, "replacements"),
+        json={"text": "  MARIA   garcia ", "replacement": "Client A"},
+        headers=admin_headers,
+    )
+    assert put.status_code == 200, put.text
+    assert put.json() == {"key": "maria garcia", "replacement": "Client A"}
+    listed = (
+        await client.get(_edit_url(run_id, "replacements"), headers=admin_headers)
+    ).json()
+    assert listed == [{"key": "maria garcia", "replacement": "Client A"}]
+
+    # Replaced: the box is painted white with a black outline, not blurred.
+    resp = await _render(
+        client,
+        admin_headers,
+        run_id,
+        page_numbers=[1],
+        format="png",
+        replace=True,
+        entity_ids=["e0"],
+    )
+    img = Image.open(io.BytesIO(resp.content)).convert("RGB")
+    assert img.getpixel((50, 45)) == (255, 255, 255)
+    # Not asked: the box is blurred as usual.
+    plain = await _render(client, admin_headers, run_id, page_numbers=[1], format="png")
+    assert Image.open(io.BytesIO(plain.content)).convert("RGB").getpixel((50, 45)) != (
+        255,
+        255,
+        255,
+    )
+
+    # An empty replacement removes it.
+    await client.put(
+        _edit_url(run_id, "replacements"),
+        json={"text": "maria garcia", "replacement": ""},
+        headers=admin_headers,
+    )
+    assert (
+        await client.get(_edit_url(run_id, "replacements"), headers=admin_headers)
+    ).json() == []
+
+
+async def test_a_corrected_box_is_used_on_export(
+    client, admin_headers, project, sent, objects
+):
+    run_id = await _file_run(client, admin_headers, project, sent)
+    # Move the box of e2 (page 2) to the bottom right, where the page is flat.
+    box = {"x": 0.8, "y": 0.8, "width": 0.15, "height": 0.15}
+    put = await client.put(
+        _edit_url(run_id, "box-overrides"),
+        json={"page_number": 2, "entity_id": "e2", "bbox_index": 0, **box},
+        headers=admin_headers,
+    )
+    assert put.status_code == 200, put.text
+    again = await client.put(
+        _edit_url(run_id, "box-overrides"),
+        json={"page_number": 2, "entity_id": "e2", "bbox_index": 0, **box, "x": 0.7},
+        headers=admin_headers,
+    )
+    assert again.json()["id"] == put.json()["id"] and again.json()["x"] == 0.7
+    assert len(
+        (await client.get(_edit_url(run_id, "box-overrides"), headers=admin_headers)).json()
+    ) == 1
+
+    await client.put(
+        _edit_url(run_id, "replacements"),
+        json={"text": "Paris", "replacement": "Ville"},
+        headers=admin_headers,
+    )
+    resp = await _render(
+        client, admin_headers, run_id, page_numbers=[2], format="png", replace=True
+    )
+    img = Image.open(io.BytesIO(resp.content)).convert("RGB")
+    # The replacement sits on the corrected box, not on the detected one.
+    assert img.getpixel((320, 165)) == (255, 255, 255)
+    assert img.getpixel((50, 45)) == (255, 0, 0)  # the detected box is left alone
+
+    gone = await client.delete(
+        _edit_url(run_id, "box-overrides", f"/{put.json()['id']}"),
+        headers=admin_headers,
+    )
+    assert gone.status_code == 204
+
+
+async def test_move_a_drawn_box(client, admin_headers, project, sent):
+    run_id = await _file_run(client, admin_headers, project, sent)
+    created = (
+        await client.post(_url(run_id), json=BOX, headers=admin_headers)
+    ).json()
+    moved = await client.patch(
+        _url(run_id, f"/{created['id']}"),
+        json={"x": 0.5, "y": 0.5, "width": 0.4, "height": 0.4},
+        headers=admin_headers,
+    )
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["x"] == 0.5 and moved.json()["label"] is None
+    outside = await client.patch(
+        _url(run_id, f"/{created['id']}"),
+        json={"x": 0.9, "y": 0.5, "width": 0.4, "height": 0.4},
+        headers=admin_headers,
+    )
+    assert outside.status_code == 422
