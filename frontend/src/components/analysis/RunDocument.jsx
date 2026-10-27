@@ -106,7 +106,7 @@ export function PageImage({
     const box = boxOf(draft.from, point(e));
     setDraft(null);
     // A click, not a drag: ignore it.
-    if (box.width > 0.005 && box.height > 0.005) onDraw?.(box);
+    if (box.width > 0.005 && box.height > 0.005) onDraw?.(box, url);
   };
 
   if (loading)
@@ -143,11 +143,12 @@ export function PageImage({
         <button
           type="button"
           key={b.id}
-          title={drawMode ? t("run.doc.drawHint") : b.label || ""}
+          title={[b.label, drawMode && t("run.doc.drawHint")].filter(Boolean).join(" · ")}
           disabled={!drawMode}
           onClick={() => onDeleteDrawn?.(b.id)}
           className="absolute border-2 border-neutral-900 bg-neutral-900/35 disabled:cursor-default"
           style={{
+            ...(b.label ? { borderColor: colorFor(b.label) } : {}),
             left: `${b.x * 100}%`,
             top: `${b.y * 100}%`,
             width: `${b.width * 100}%`,

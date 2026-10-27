@@ -13,11 +13,13 @@ import {
 } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
+import { useEntityLabels } from "../../../hooks/useEntityLabels";
 import { usePageBboxes } from "../../../hooks/usePageBboxes";
 import { renderRunDocument } from "../../../lib/api";
 import { buildPages, colorFor, isAnonymizing } from "../../../lib/runModel";
 import { cn } from "../../../lib/utils";
 import { useI18n } from "../../../lib/i18n.jsx";
+import DrawBoxDialog from "../DrawBoxDialog";
 import { AnonymizedText, PageImage, PageText, highlights } from "../RunDocument";
 
 const pct = (n) => (n == null ? "" : `${Math.round(n * 100)}%`);
@@ -138,6 +140,8 @@ export default function ResultsViewer({ run, source }) {
   // Boxes drawn by hand on the page: blurred on export, kept for the metrics.
   const { boxes: drawn, add: addDrawn, remove: removeDrawn } = usePageBboxes(run?.id);
   const [drawMode, setDrawMode] = useState(false);
+  // A box just drawn, waiting for its label: { pageNumber, box, url }.
+  const [pending, setPending] = useState(null);
   const anonymizing = isAnonymizing(run);
   const [maskedByUser, setMasked] = useState(false);
   const masked = anonymizing || maskedByUser;
@@ -147,6 +151,7 @@ export default function ResultsViewer({ run, source }) {
   const [checked, setChecked] = useState(() => new Set(allKeys));
   useEffect(() => setChecked(new Set(allKeys)), [allKeys.join("|")]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const labels = useEntityLabels(run, pages);
   const page = pages[Math.min(index, pages.length - 1)];
   const items = useMemo(() => (page ? highlights(page, LAYERS, masked) : []), [page, masked]);
   if (!page) return null;
@@ -253,7 +258,7 @@ export default function ResultsViewer({ run, source }) {
               onActive={setActiveId}
               drawn={drawn.filter((b) => b.page_number === page.number)}
               drawMode={drawMode}
-              onDraw={(box) => addDrawn(page.number, box)}
+              onDraw={(box, url) => setPending({ pageNumber: page.number, box, url })}
               onDeleteDrawn={removeDrawn}
             />
           ) : page.anonymized !== null ? (
@@ -340,6 +345,16 @@ export default function ResultsViewer({ run, source }) {
           {t("wiz.results.exportText")}
         </p>
       )}
+
+      <DrawBoxDialog
+        pending={pending}
+        labels={labels}
+        onCancel={() => setPending(null)}
+        onSave={(label) => {
+          addDrawn(pending.pageNumber, { ...pending.box, label });
+          setPending(null);
+        }}
+      />
     </div>
   );
 }
