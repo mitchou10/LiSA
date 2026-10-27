@@ -513,9 +513,16 @@ async def test_a_corrected_box_is_used_on_export(
         headers=admin_headers,
     )
     assert again.json()["id"] == put.json()["id"] and again.json()["x"] == 0.7
-    assert len(
-        (await client.get(_edit_url(run_id, "box-overrides"), headers=admin_headers)).json()
-    ) == 1
+    assert (
+        len(
+            (
+                await client.get(
+                    _edit_url(run_id, "box-overrides"), headers=admin_headers
+                )
+            ).json()
+        )
+        == 1
+    )
 
     await client.put(
         _edit_url(run_id, "replacements"),
@@ -539,9 +546,7 @@ async def test_a_corrected_box_is_used_on_export(
 
 async def test_move_a_drawn_box(client, admin_headers, project, sent):
     run_id = await _file_run(client, admin_headers, project, sent)
-    created = (
-        await client.post(_url(run_id), json=BOX, headers=admin_headers)
-    ).json()
+    created = (await client.post(_url(run_id), json=BOX, headers=admin_headers)).json()
     moved = await client.patch(
         _url(run_id, f"/{created['id']}"),
         json={"x": 0.5, "y": 0.5, "width": 0.4, "height": 0.4},
