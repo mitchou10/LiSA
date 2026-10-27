@@ -18,7 +18,9 @@ class ClientError(Exception):
     def __init__(self, status_code: int, detail: Any) -> None:
         self.status_code = status_code
         self.detail = detail
-        super().__init__(f"HTTP {status_code}: {detail}")
+        # The detail can quote what was sent (a 422 echoes its input): it stays
+        # on the exception for the code, but not in its message, which gets logged.
+        super().__init__(f"HTTP {status_code}")
 
 
 class BaseClient:

@@ -18,9 +18,11 @@ def get_service() -> AnonymizeServiceV2:
 # The Celery task name matches the service name so the backend can dispatch by
 # service name (``celery.send_task(service.name, ...)``).
 @celery_app.task(name=AnonymizeServiceV2.name)
-def scan(input_data: Any, task_id: str | None = None) -> dict[str, Any]:
-    """Run the Anonymize scanner on ``input_data`` and return the result.
+def scan(input_data: Any, task_id: str | None = None) -> None:
+    """Run the Anonymize scanner on ``input_data`` and report it through the API.
 
     ``task_id`` is the backend task to report progress/status against.
     """
-    return get_service().process(input_data, task_id=task_id)
+    # Nothing is returned: the output goes back through the API, and what a task
+    # returns is printed in the worker's log.
+    get_service().process(input_data, task_id=task_id)

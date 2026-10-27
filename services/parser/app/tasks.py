@@ -16,6 +16,8 @@ def get_service() -> ParserService:
 
 
 @celery_app.task(name=ParserService.name)
-def parse(input_data: Any, task_id: str | None = None) -> dict[str, Any]:
-    """Parse the uploaded files and return pages with text and boxes."""
-    return get_service().process(input_data, task_id=task_id)
+def parse(input_data: Any, task_id: str | None = None) -> None:
+    """Parse the uploaded files and report pages with text and boxes through the API."""
+    # Nothing is returned: the output goes back through the API, and what a task
+    # returns is printed in the worker's log.
+    get_service().process(input_data, task_id=task_id)
