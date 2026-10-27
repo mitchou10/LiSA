@@ -9,9 +9,11 @@ import {
   FileImage,
   FileText,
   Loader2,
+  PencilRuler,
 } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
+import { usePageBboxes } from "../../../hooks/usePageBboxes";
 import { renderRunDocument } from "../../../lib/api";
 import { buildPages, colorFor, isAnonymizing } from "../../../lib/runModel";
 import { cn } from "../../../lib/utils";
@@ -133,6 +135,9 @@ export default function ResultsViewer({ run, source }) {
   const [index, setIndex] = useState(0);
   const [view, setView] = useState("image");
   const [activeId, setActiveId] = useState(null);
+  // Boxes drawn by hand on the page: blurred on export, kept for the metrics.
+  const { boxes: drawn, add: addDrawn, remove: removeDrawn } = usePageBboxes(run?.id);
+  const [drawMode, setDrawMode] = useState(false);
   const anonymizing = isAnonymizing(run);
   const [maskedByUser, setMasked] = useState(false);
   const masked = anonymizing || maskedByUser;
@@ -220,6 +225,17 @@ export default function ResultsViewer({ run, source }) {
                   ))}
                 </div>
               )}
+              {showImage && (
+                <Button
+                  size="sm"
+                  variant={drawMode ? "secondary" : "ghost"}
+                  onClick={() => setDrawMode(!drawMode)}
+                  title={t("run.doc.drawHint")}
+                >
+                  <PencilRuler className="h-4 w-4" />
+                  {t("run.doc.draw")}
+                </Button>
+              )}
               {!anonymizing && (
                 <Button size="sm" variant="ghost" onClick={() => setMasked(!maskedByUser)}>
                   {masked ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
@@ -230,7 +246,16 @@ export default function ResultsViewer({ run, source }) {
           </div>
 
           {showImage ? (
-            <PageImage page={page} items={items} activeId={activeId} onActive={setActiveId} />
+            <PageImage
+              page={page}
+              items={items}
+              activeId={activeId}
+              onActive={setActiveId}
+              drawn={drawn.filter((b) => b.page_number === page.number)}
+              drawMode={drawMode}
+              onDraw={(box) => addDrawn(page.number, box)}
+              onDeleteDrawn={removeDrawn}
+            />
           ) : page.anonymized !== null ? (
             <AnonymizedText content={page.anonymized} t={t} />
           ) : (
