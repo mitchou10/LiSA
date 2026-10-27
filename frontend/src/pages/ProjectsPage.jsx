@@ -7,6 +7,7 @@ import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { createProject, deleteProject, getProjects } from "../lib/api";
 import { useI18n } from "../lib/i18n.jsx";
+import { useUnsavedWork } from "../lib/unsavedWork.jsx";
 
 /** Projects: create one, then open it to say what it looks for. */
 export default function ProjectsPage() {
@@ -16,6 +17,7 @@ export default function ProjectsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
+  useUnsavedWork(creating || !!name.trim() || !!description.trim());
 
   const load = useCallback(async () => {
     try {

@@ -19,6 +19,7 @@ import {
 } from "../lib/api";
 import { textToPages } from "../lib/runModel";
 import { useI18n } from "../lib/i18n.jsx";
+import { useUnsavedWork } from "../lib/unsavedWork.jsx";
 
 const SOURCE = 0;
 const ANALYSIS = 1;
@@ -142,6 +143,10 @@ export default function AnalysisPage() {
     (mode === "project" && !!projectId && !!definitions && selectedCount > 0) ||
     (mode === "new" && newProject.name.trim().length > 0 && newProject.labels.size > 0);
   const busy = running || uploading;
+  // Setting up or running: the results are done, leaving them loses nothing.
+  useUnsavedWork(
+    busy || step === RUN || (step !== RESULTS && (hasInput || mode === "new" || step === ANALYSIS))
+  );
 
   const launch = async () => {
     setFormError(null);
