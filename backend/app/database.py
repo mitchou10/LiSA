@@ -20,6 +20,8 @@ class Base(DeclarativeBase):
 engine: AsyncEngine = create_async_engine(
     settings.database_url,
     echo=settings.db_echo,
+    # A failed statement must not print the values it carried (texts, entities).
+    hide_parameters=True,
     pool_pre_ping=True,
 )
 

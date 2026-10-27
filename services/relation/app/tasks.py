@@ -18,6 +18,8 @@ def get_service() -> RelationService:
 # The Celery task name matches the service name so the backend can dispatch by
 # service name.
 @celery_app.task(name=RelationService.name)
-def scan(input_data: Any, task_id: str | None = None) -> dict[str, Any]:
+def scan(input_data: Any, task_id: str | None = None) -> None:
     """Extract the relations of the pages of ``input_data``."""
-    return get_service().process(input_data, task_id=task_id)
+    # Nothing is returned: the output goes back through the API, and what a task
+    # returns is printed in the worker's log.
+    get_service().process(input_data, task_id=task_id)

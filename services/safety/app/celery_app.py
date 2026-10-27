@@ -11,10 +11,13 @@ import logging
 
 from celery import Celery
 from celery.signals import worker_ready
+from worker.core.safe_logging import install_celery_safe_logging
 
 from app.config import settings
 
 logging.basicConfig(level=logging.INFO)
+# Celery logs the value a task returns and the text of its errors: not here.
+install_celery_safe_logging()
 logger = logging.getLogger("lisa.service.safety")
 
 celery_app = Celery(

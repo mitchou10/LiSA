@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import api_router, health
 from app.config import get_settings
+from app.core.safe_logging import hide_exception_messages
 from app.database import async_session_factory
 from app.migrations import run_migrations
 from app.services.detection_profile import DetectionProfileService
@@ -17,6 +18,9 @@ from app.services.exceptions import (
 )
 
 settings = get_settings()
+
+# Tracebacks in the logs name the exception, not what it quotes of the documents.
+hide_exception_messages("", "uvicorn", "uvicorn.error")
 
 
 async def _seed_detection_profiles() -> None:

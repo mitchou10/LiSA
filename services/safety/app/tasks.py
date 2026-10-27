@@ -18,6 +18,8 @@ def get_service() -> SafetyService:
 # The Celery task name matches the service name so the backend can dispatch by
 # service name.
 @celery_app.task(name=SafetyService.name)
-def scan(input_data: Any, task_id: str | None = None) -> dict[str, Any]:
-    """Check the pages of ``input_data`` and return safety verdicts and PII."""
-    return get_service().process(input_data, task_id=task_id)
+def scan(input_data: Any, task_id: str | None = None) -> None:
+    """Check the pages of ``input_data`` and report safety verdicts and PII through the API."""
+    # Nothing is returned: the output goes back through the API, and what a task
+    # returns is printed in the worker's log.
+    get_service().process(input_data, task_id=task_id)
