@@ -3,16 +3,30 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 
-from app.api.deps import AdminDep, CurrentUserDep, TaskServiceDep
+from app.api.deps import AdminDep, CurrentUserDep, SessionDep, TaskServiceDep
 from app.core import storage
 from app.models.enums import TaskStatus
+from app.models.page_bbox import PageBbox
+from app.repositories.page_bbox import PageBboxRepository
+from app.schemas.auth import CurrentUser
+from app.schemas.page_bbox import PageBboxCreate, PageBboxRead
 from app.schemas.pagination import Page
+from app.schemas.render import RenderRequest
+from app.schemas.run import DefaultRunCreate, RunRead
 from app.schemas.task import TaskRead, TaskStatusRead, TaskSubmit, TaskUpdate
+from app.services.render import RenderError, RenderService
+from app.services.run import RunService
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-@router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)
+def check_if_admin_or_owner(_user: CurrentUser, obj: TaskRead) -> TaskRead:
+    if not (_user.is_admin or obj.user_id == _user.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found.")
+    return obj
+
+
+@router.post("", status_code=status.HTTP_201_CREATED)
 async def submit_task(
     payload: TaskSubmit, service: TaskServiceDep, _user: CurrentUserDep
 ) -> TaskRead:
@@ -21,7 +35,49 @@ async def submit_task(
     return TaskRead.model_validate(obj)
 
 
-@router.get("", response_model=Page[TaskRead])
+@router.post("/runs", status_code=status.HTTP_201_CREATED)
+async def start_default_run(
+    payload: DefaultRunCreate, session: SessionDep, user: CurrentUserDep
+) -> RunRead:
+    """Analyse a text or files with the default definitions, no project.
+
+    Applies the same defaults every new project is seeded with: the PII
+    entities (ner) and the safety checks. Returns the run like a project run.
+    """
+    return await RunService(session).start_default(user, payload)
+
+
+@router.get("/me")
+async def list_my_tasks(
+    service: TaskServiceDep,
+    user: CurrentUserDep,
+    status: Annotated[TaskStatus | None, Query(description="Filter by status.")] = None,
+    service_id: Annotated[UUID | None, Query(description="Filter by service.")] = None,
+    project_id: Annotated[UUID | None, Query(description="Filter by project.")] = None,
+    roots_only: Annotated[
+        bool, Query(description="Only return root tasks (no parent).")
+    ] = False,
+    limit: Annotated[int, Query(ge=1, le=500)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> Page[TaskRead]:
+    items, total = await service.list_page(
+        user_id=user.id,
+        status=status,
+        service_id=service_id,
+        project_id=project_id,
+        roots_only=roots_only,
+        limit=limit,
+        offset=offset,
+    )
+    return Page[TaskRead](
+        items=[TaskRead.model_validate(o) for o in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("")
 async def list_tasks(
     service: TaskServiceDep,
     _user: CurrentUserDep,
@@ -35,6 +91,8 @@ async def list_tasks(
     limit: Annotated[int, Query(ge=1, le=500)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> Page[TaskRead]:
+    if not _user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Not authorized.")
     items, total = await service.list_page(
         user_id=user_id,
         status=status,
@@ -44,7 +102,7 @@ async def list_tasks(
         limit=limit,
         offset=offset,
     )
-    return Page(
+    return Page[TaskRead](
         items=[TaskRead.model_validate(o) for o in items],
         total=total,
         limit=limit,
@@ -52,12 +110,12 @@ async def list_tasks(
     )
 
 
-@router.get("/{task_id}", response_model=TaskRead)
+@router.get("/{task_id}")
 async def get_task(
     task_id: UUID, service: TaskServiceDep, _user: CurrentUserDep
 ) -> TaskRead:
     obj = await service.get(task_id)
-    return TaskRead.model_validate(obj)
+    return check_if_admin_or_owner(_user, TaskRead.model_validate(obj))
 
 
 @router.get("/{task_id}/pages/{page_number}/image")
@@ -100,6 +158,96 @@ async def get_task_status(
     """Lightweight endpoint to poll a task's progress."""
     obj = await service.get(task_id)
     return TaskStatusRead.model_validate(obj)
+
+
+@router.post("/{task_id}/render")
+async def render_run_pages(
+    task_id: UUID,
+    payload: RenderRequest,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> Response:
+    """The pages of a finished file run, blurred and annotated, as a download.
+
+    ``task_id`` is the run (the parent task). The pages come from the run's
+    own tasks, never from anything the caller sends, and only for the run's
+    owner or an admin. ``format`` picks the file: one PNG (one page), a ZIP of
+    PNGs, or a PDF; ``blur`` picks what to hide (nothing, the selected
+    entities, or the whole page); ``boxes`` draws each kept entity's box with
+    its label above it.
+    """
+    task = await service.get(task_id)
+    # Same answer for "missing" and "not yours": do not reveal existence.
+    if not (user.is_admin or task.user_id == user.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Nothing to render.")
+    try:
+        rendered = await RenderService(session).render(task_id, payload)
+    except RenderError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
+    return Response(
+        content=rendered.data,
+        media_type=rendered.media_type,
+        headers={"Content-Disposition": f'attachment; filename="{rendered.filename}"'},
+    )
+
+
+async def _own_run(service: TaskServiceDep, user: CurrentUser, run_id: UUID) -> None:
+    """404 unless the run is the caller's (or the caller is an admin)."""
+    task = await service.get(run_id)
+    if not (user.is_admin or task.user_id == user.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found.")
+
+
+@router.get("/{task_id}/bboxes", response_model=list[PageBboxRead])
+async def list_page_bboxes(
+    task_id: UUID,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+    page_number: Annotated[int | None, Query(ge=1)] = None,
+) -> list[PageBbox]:
+    """The boxes drawn on the pages of a run (one page, or all of them)."""
+    await _own_run(service, user, task_id)
+    return await PageBboxRepository(session).list_for_run(task_id, page_number)
+
+
+@router.post(
+    "/{task_id}/bboxes",
+    response_model=PageBboxRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_page_bbox(
+    task_id: UUID,
+    payload: PageBboxCreate,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> PageBbox:
+    """Draw a box on a page: it is blurred on export and kept for the metrics."""
+    await _own_run(service, user, task_id)
+    bbox = await PageBboxRepository(session).add(
+        PageBbox(run_id=task_id, created_by=user.id, **payload.model_dump())
+    )
+    await session.commit()
+    return bbox
+
+
+@router.delete("/{task_id}/bboxes/{bbox_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_page_bbox(
+    task_id: UUID,
+    bbox_id: UUID,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> None:
+    await _own_run(service, user, task_id)
+    repo = PageBboxRepository(session)
+    bbox = await repo.get(bbox_id)
+    if bbox is None or bbox.run_id != task_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Box not found.")
+    await repo.delete(bbox)
+    await session.commit()
 
 
 @router.get("/{task_id}/children", response_model=list[TaskRead])

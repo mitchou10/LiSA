@@ -13,9 +13,12 @@ npm install
 npm run dev
 ```
 
-L'application appelle l'API définie par `VITE_API_URL`
-(défaut : `http://localhost:8000/analyze`). Copiez `.env.example` en `.env`
-pour la personnaliser.
+L'application appelle l'API définie par `VITE_API_URL`, fixée **au moment du
+build** : en développement, `http://localhost:8000` (copiez `.env.example` en
+`.env.local` pour la changer). Vide, c'est la même origine : les appels vont
+vers `/api/v1/...` sur l'hôte qui sert l'application, ce qui est le défaut de
+l'image Docker. Pour une API sur un autre hôte, passez
+`--build-arg VITE_API_URL=https://api.example.com`.
 
 L'API doit accepter `POST { "data": "<texte>" }` et renvoyer un objet de la forme :
 

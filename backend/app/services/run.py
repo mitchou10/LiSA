@@ -1,4 +1,4 @@
-"""Run a project's analyses: text or files in, the right workers fed in order.
+"""Run analyses: text or files in, the right workers fed in order.
 
 A run is a parent task (no service of its own) with one child task per worker:
 
@@ -7,7 +7,11 @@ A run is a parent task (no service of its own) with one child task per worker:
   wait (``awaiting`` in their input) until the parser succeeds: its pages are
   then injected and they are dispatched (see ``TaskService.update``).
 
-Every analysis worker gets only what the user selected in the project.
+Two ways to tell a run what to look for:
+
+* a **project run** applies what the user selected in the project;
+* a **default run** needs no project: it applies the same defaults every new
+  project is seeded with (PII entities, safety checks).
 """
 
 from __future__ import annotations
@@ -30,6 +34,7 @@ from app.schemas.run import RunCreate, RunRead, RunStep
 from app.services.exceptions import ConflictError, NotFoundError
 from app.services.privacy import mask_text_fields
 from app.services.project import KINDS, ProjectService
+from app.services.run_defaults import default_definitions
 from app.services.task import TaskService
 
 PARSER = "liteparse-ocr"
@@ -184,6 +189,25 @@ class RunService:
             definitions = await self._definitions(project, kind, getattr(data, field))
             if definitions:
                 selected[kind] = definitions
+        return await self._start(user, data, selected, project_id=project.id)
+
+    async def start_default(self, user: CurrentUser, data: RunCreate) -> RunRead:
+        """Run the default analysis: no project, nothing to configure.
+
+        The same defaults every new project is seeded with: the PII entities
+        (ner) and the GLiNER guardrails safety checks. The selection fields of
+        ``data`` are ignored: a default run applies everything it has.
+        """
+        return await self._start(user, data, default_definitions(), project_id=None)
+
+    async def _start(
+        self,
+        user: CurrentUser,
+        data: RunCreate,
+        selected: dict[str, list[Any]],
+        *,
+        project_id: UUID | None,
+    ) -> RunRead:
         if not selected:
             raise ConflictError(
                 "Nothing to apply: this project has no enabled definition "
@@ -211,13 +235,24 @@ class RunService:
 
         parent = Task(
             user_id=user.id,
-            project_id=project.id,
+            project_id=project_id,
             status=TaskStatus.PENDING,
             input_data={
-                "kind": "project_run",
+                "kind": "project_run" if project_id is not None else "default_run",
                 "source": "files" if files else "text",
                 "file_ids": [str(f.id) for f in files],
-                "selected": {k: [str(d.id) for d in v] for k, v in selected.items()},
+                # What was applied: definition ids, or names for a default run.
+                "selected": {
+                    k: [
+                        (
+                            str(d.id)
+                            if hasattr(d, "id")
+                            else getattr(d, KINDS[k].name_field)
+                        )
+                        for d in v
+                    ]
+                    for k, v in selected.items()
+                },
                 "anonymize": data.anonymize,
             },
         )
@@ -283,7 +318,8 @@ class RunService:
             steps.append(("anonymize", anonymize_task, anonymizer))
 
         for f in files:
-            f.project_id = f.project_id or project.id  # files join the project
+            # Files join the project, when there is one.
+            f.project_id = f.project_id or project_id
         await self.session.commit()
 
         # Text: every worker starts now. Files: only the parser does; the rest
@@ -294,7 +330,7 @@ class RunService:
 
         return RunRead(
             id=parent.id,
-            project_id=project.id,
+            project_id=project_id,
             status=parent.status,
             steps=[
                 RunStep(

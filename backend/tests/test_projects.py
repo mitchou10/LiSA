@@ -71,11 +71,12 @@ async def test_projects_are_private_to_their_owner_but_not_to_admins(
 
 async def test_list_shows_counts(client, admin_headers):
     pid = (await _project(client, admin_headers))["id"]
+    # Labels that are not among the seeded PII entities.
     await client.post(
-        f"{P}/{pid}/entities", json={"label": "iban"}, headers=admin_headers
+        f"{P}/{pid}/entities", json={"label": "account"}, headers=admin_headers
     )
     await client.post(
-        f"{P}/{pid}/entities", json={"label": "person"}, headers=admin_headers
+        f"{P}/{pid}/entities", json={"label": "customer"}, headers=admin_headers
     )
     await client.post(
         f"{P}/{pid}/relations", json={"name": "works_for"}, headers=admin_headers
@@ -86,8 +87,13 @@ async def test_list_shows_counts(client, admin_headers):
         headers=admin_headers,
     )
     (item,) = (await client.get(P, headers=admin_headers)).json()["items"]
-    assert (item["entities"], item["relations"], item["classifications"]) == (2, 1, 1)
-    assert item["safety_checks"] == 0
+    # New projects are seeded with the default PII entities and safety checks.
+    assert (item["entities"], item["relations"], item["classifications"]) == (
+        12,
+        1,
+        1,
+    )
+    assert item["safety_checks"] == 3
 
 
 # -- entities ---------------------------------------------------------------------
@@ -95,21 +101,49 @@ async def test_entity_defaults_and_normalization(client, admin_headers):
     pid = (await _project(client, admin_headers))["id"]
     resp = await client.post(
         f"{P}/{pid}/entities",
-        json={"label": " iban ", "category": "pii", "description": "A bank account"},
+        json={
+            "label": " account number ",
+            "category": "pii",
+            "description": "A bank account",
+        },
         headers=admin_headers,
     )
     assert resp.status_code == 201, resp.text
     e = resp.json()
-    assert (e["label"], e["category"]) == ("iban", "PII")
+    assert (e["label"], e["category"]) == ("account number", "PII")
     assert (e["severity"], e["action"], e["enabled"]) == ("medium", "redact", True)
     assert e["threshold"] is None and e["created_by"] == "service"
+
+
+async def test_seeded_definitions_can_be_renamed_and_deleted(client, admin_headers):
+    """The seeded rows are plain catalog rows: edit or delete them at will."""
+    pid = (await _project(client, admin_headers))["id"]
+    seeded = (await client.get(f"{P}/{pid}/entities", headers=admin_headers)).json()
+    iban = next(e for e in seeded if e["label"] == "iban")
+    # A seeded label can be renamed, then recreated under its old name.
+    resp = await client.patch(
+        f"{P}/{pid}/entities/{iban['id']}",
+        json={"label": "bank account"},
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200 and resp.json()["label"] == "bank account"
+    resp = await client.post(
+        f"{P}/{pid}/entities", json={"label": "iban"}, headers=admin_headers
+    )
+    assert resp.status_code == 201, resp.text
+    # And deleted like any other row.
+    assert (
+        await client.delete(
+            f"{P}/{pid}/entities/{resp.json()['id']}", headers=admin_headers
+        )
+    ).status_code == 204
 
 
 async def test_entity_update_and_delete(client, admin_headers):
     pid = (await _project(client, admin_headers))["id"]
     eid = (
         await client.post(
-            f"{P}/{pid}/entities", json={"label": "iban"}, headers=admin_headers
+            f"{P}/{pid}/entities", json={"label": "account"}, headers=admin_headers
         )
     ).json()["id"]
     resp = await client.patch(
@@ -129,7 +163,7 @@ async def test_entity_update_and_delete(client, admin_headers):
         0.8,
         False,
     )
-    assert e["label"] == "iban"
+    assert e["label"] == "account"
     assert (
         await client.delete(f"{P}/{pid}/entities/{eid}", headers=admin_headers)
     ).status_code == 204
@@ -158,16 +192,16 @@ async def test_names_are_unique_in_a_project_not_across(client, admin_headers):
     p2 = (await _project(client, admin_headers, "Two"))["id"]
     assert (
         await client.post(
-            f"{P}/{p1}/entities", json={"label": "iban"}, headers=admin_headers
+            f"{P}/{p1}/entities", json={"label": "account"}, headers=admin_headers
         )
     ).status_code == 201
     dup = await client.post(
-        f"{P}/{p1}/entities", json={"label": "IBAN"}, headers=admin_headers
+        f"{P}/{p1}/entities", json={"label": "ACCOUNT"}, headers=admin_headers
     )
     assert dup.status_code == 409
     assert (
         await client.post(
-            f"{P}/{p2}/entities", json={"label": "iban"}, headers=admin_headers
+            f"{P}/{p2}/entities", json={"label": "account"}, headers=admin_headers
         )
     ).status_code == 201
 
@@ -177,13 +211,18 @@ async def test_definitions_do_not_leak_between_projects(client, admin_headers):
     p2 = (await _project(client, admin_headers, "Two"))["id"]
     eid = (
         await client.post(
-            f"{P}/{p1}/entities", json={"label": "iban"}, headers=admin_headers
+            f"{P}/{p1}/entities", json={"label": "account"}, headers=admin_headers
         )
     ).json()["id"]
     assert (
         await client.get(f"{P}/{p2}/entities/{eid}", headers=admin_headers)
     ).status_code == 404
-    assert (await client.get(f"{P}/{p2}/entities", headers=admin_headers)).json() == []
+    # The fresh project only holds its seeded PII entities.
+    labels = {
+        e["label"]
+        for e in (await client.get(f"{P}/{p2}/entities", headers=admin_headers)).json()
+    }
+    assert "account" not in labels and "person" in labels
 
 
 async def test_deleting_a_project_deletes_what_it_looks_for(client, admin_headers):

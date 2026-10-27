@@ -17,90 +17,6 @@ SERVICES = {
 }
 
 
-@pytest.fixture
-def sent(monkeypatch):
-    """Capture what is sent to the broker: (service, task_id, input, queue)."""
-    calls: list[tuple[str, str, dict, str | None]] = []
-
-    def fake(service_name, task_id, input_data, queue=None):
-        calls.append((service_name, task_id, input_data, queue))
-
-    monkeypatch.setattr("app.services.task.dispatch_task", fake)
-    return calls
-
-
-@pytest.fixture(autouse=True)
-def fake_storage(monkeypatch):
-    from app.core import storage
-
-    async def put(key, data, content_type="application/octet-stream"):
-        pass
-
-    monkeypatch.setattr(storage, "put_object", put)
-
-
-@pytest.fixture
-async def registered(client, admin_headers):
-    """The workers have registered themselves."""
-    for name, queue in SERVICES.items():
-        resp = await client.post(
-            "/api/v1/services",
-            json={"name": name, "queue": queue, "type": "analyser"},
-            headers=admin_headers,
-        )
-        assert resp.status_code == 201, resp.text
-
-
-@pytest.fixture
-async def project(client, admin_headers, registered):
-    """A project that looks for everything."""
-    pid = (await client.post(P, json={"name": "Docs"}, headers=admin_headers)).json()[
-        "id"
-    ]
-
-    async def add(kind, payload):
-        resp = await client.post(
-            f"{P}/{pid}/{kind}", json=payload, headers=admin_headers
-        )
-        assert resp.status_code == 201, resp.text
-        return resp.json()
-
-    return {
-        "id": pid,
-        "iban": await add(
-            "entities",
-            {
-                "label": "iban",
-                "description": "A bank account",
-                "category": "pii",
-                "severity": "high",
-                "action": "block",
-                "threshold": 0.8,
-            },
-        ),
-        "old": await add("entities", {"label": "legacy", "enabled": False}),
-        "works_for": await add(
-            "relations", {"name": "works_for", "description": "person -> organization"}
-        ),
-        "doc_type": await add(
-            "classifications",
-            {
-                "name": "doc_type",
-                "labels": [{"name": "invoice", "description": "A bill"}, "other"],
-            },
-        ),
-        "jailbreak": await add(
-            "safety",
-            {
-                "name": "jailbreak",
-                "multi_label": True,
-                "threshold": 0.4,
-                "labels": ["prompt_injection", {"name": "benign", "is_ok": True}],
-            },
-        ),
-    }
-
-
 async def run(client, headers, project, **body):
     return await client.post(f"{P}/{project['id']}/runs", json=body, headers=headers)
 
@@ -257,6 +173,17 @@ async def test_nothing_to_apply_is_refused(client, admin_headers, registered, se
     empty = (
         await client.post(P, json={"name": "Empty"}, headers=admin_headers)
     ).json()["id"]
+    # The seeded definitions are disabled first: an empty project refuses.
+    for kind in ("entities", "safety"):
+        for row in (
+            await client.get(f"{P}/{empty}/{kind}", headers=admin_headers)
+        ).json():
+            resp = await client.patch(
+                f"{P}/{empty}/{kind}/{row['id']}",
+                json={"enabled": False},
+                headers=admin_headers,
+            )
+            assert resp.status_code == 200, resp.text
     resp = await client.post(
         f"{P}/{empty}/runs", json={"text": "x"}, headers=admin_headers
     )

@@ -1,6 +1,6 @@
 [project]
 name = "lisa-server"
-version = "0.5.0"
+version = "1.4.0"
 description = "LiSA backend API: services & tasks management"
 requires-python = ">=3.13"
 dependencies = [
@@ -8,8 +8,8 @@ dependencies = [
     "uvicorn[standard]>=0.54.0",
     "sqlalchemy[asyncio]>=2.1.4",
     "asyncpg>=0.32.0",
-    "pydantic>=2.14.0",
-    "pydantic-settings>=2.15.0",
+    "pydantic>=2.14.1",
+    "pydantic-settings>=2.16.1",
     "python-dotenv>=1.2.4",
     "celery[redis]>=5.6.3",
     "pyjwt[crypto]>=2.15.1",
@@ -17,12 +17,14 @@ dependencies = [
     "alembic>=1.20.0",
     "redis>=8.1.0",
     "httpx>=0.27.0",
-    "boto3>=1.35.0",
+    "boto3>=1.43.116",
+    "supervision>=0.31.0",
+    "opencv-python-headless>=4.12.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=9.0.3",
+    "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "httpx>=0.27.0",
     "aiosqlite>=0.20.0",

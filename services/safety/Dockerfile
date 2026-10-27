@@ -48,6 +48,14 @@ COPY --from=builder --chown=app:app /usr/local/lib/python3.12/site-packages /usr
 COPY --from=builder --chown=app:app /usr/local/bin /usr/local/bin
 COPY --from=builder --chown=app:app /app/app /app/app
 COPY --from=builder --chown=app:app /opt/hf /opt/hf
+# Offline, always. The models were baked into /opt/hf at build time (warmup): the runtime stage never
+# set HF_HOME, so the worker looked in ~/.cache and downloaded the model from Hugging Face on first
+# use. Pointing at the baked cache and forbidding the hub keeps the worker from reaching any network.
+ENV HF_HOME=/opt/hf \
+    HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    DO_NOT_TRACK=1
 USER app
 
 HEALTHCHECK --interval=60s --timeout=20s --start-period=120s --retries=3 \

@@ -10,6 +10,10 @@ COPY migrations ./migrations
 RUN uv pip install --system --no-cache .
 
 FROM python:3.13-slim AS runtime
+# libgl1/libglib2.0-0: OpenCV (supervision's rendering backend) needs them.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 # pip is a build tool: the runtime image never installs anything, and the pip bundled with the base
 # image carries known CVEs. Removed rather than upgraded, so there is nothing left to keep patched.
 RUN python -m pip uninstall -y pip

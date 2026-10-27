@@ -101,13 +101,19 @@ backend:
   - secretRef:
       name: "lisa-db-infos"
   # Plain (non-secret) app config - see backend/app/config.py for the full settings contract.
+  # URLs are computed from the ingress host to avoid duplication - the backend builds
+  # redirect_uri, OIDC endpoints, etc. from these two values.
   env:
-    KEYCLOAK_REALM: "lisa"
-    KEYCLOAK_CLIENT_ID: "lisa-frontend"
-    KEYCLOAK_ADMIN_ROLE: "admin"
+    # Computed from global.ingress.hosts[0].name at deploy time via Helm template.
+    # Backend uses these to build redirect_uri (/api/v1/auth/callback) and post-logout redirects.
+    BACKEND_PUBLIC_URL: "https://{{ (index .Values.global.ingress.hosts 0).name }}"
+    FRONTEND_URL: "https://{{ (index .Values.global.ingress.hosts 0).name }}"
+    # All Keycloak config comes from Vault (lisa-keycloak secret) - no duplication here.
     SESSION_COOKIE_SECURE: "true"
-    S3_REGION: "us-east-1"
     LOG_LEVEL: "INFO"
+  # Non-sensitive config that can vary by env (models, regions, thresholds).
+  envCm:
+    S3_REGION: "us-east-1"
 
 # Anonymize service (services/anonymize) - Celery worker on the llm-guard-anonymize queue.
 # Uses llm-guard to detect and redact PII from text before it reaches the LLM.
@@ -133,8 +139,10 @@ anonymize:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    # Internal cluster URL - uses the Service DNS, computed from release name.
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "llm-guard-anonymize"
+  envCm:
     AWS_S3_REGION: "us-east-1"
 
 # Safety service (services/safety) - Celery worker on the safety queue.
@@ -155,7 +163,7 @@ safety:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "safety"
     SAFETY_MODEL: "fastino/GLiNER2-Guardrails-PII-Multi"
 
@@ -177,7 +185,7 @@ ner:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "ner"
     NER_MODEL: "fastino/gliner2.5-multi-v1"
     NER_THRESHOLD: "0.5"
@@ -200,7 +208,7 @@ relation:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "relation"
     RELATION_MODEL: "fastino/gliner2.5-multi-v1"
     RELATION_THRESHOLD: "0.5"
@@ -223,7 +231,7 @@ classification:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "classification"
     CLASSIFIER_BACKEND: "gliner2"
     CLASSIFIER_MODEL: "fastino/gliner2.5-multi-v1"
@@ -249,8 +257,9 @@ imageClassification:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "image-classification"
+  envCm:
     IMAGE_MODEL: "openai/clip-vit-base-patch32"
     S3_REGION: "us-east-1"
 
@@ -275,8 +284,9 @@ parser:
   - secretRef:
       name: "lisa-redis"
   env:
-    LISA_API_URL: "http://lisa-backend:8000"
+    LISA_API_URL: "http://{{ include \"helper.fullname\" . }}-backend:8000"
     CELERY_QUEUE: "liteparse-ocr"
+  envCm:
     OCR_LANGUAGE: "eng+fra"
     S3_REGION: "us-east-1"
 
@@ -431,13 +441,21 @@ redis:
       cpu: "1"
       memory: "1Gi"
 
-postgres:
-  enabled: false
-
-# A known external S3 (s3.fr-par.scw.cloud, same one used for cnpg backups) is used instead -
-# no need to self-host object storage.
+# The namespace quota (dso-quota) rejects any pod without requests/limits.
 rustfs:
-  enabled: false
+  # Root credentials come from the same Vault secret the components use to reach RustFS,
+  # so both sides always agree.
+  auth:
+    existingSecret: "lisa-s3"
+    existingSecretAccessKeyKey: "S3_ACCESS_KEY"
+    existingSecretSecretKeyKey: "S3_SECRET_KEY"
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
 
 cnpg:
   enabled: true
@@ -465,9 +483,18 @@ cnpg:
     monitoring:
       enabled: true
   backups:
+    # Required by the cluster chart: without it the whole `backups` block below
+    # is silently dropped from the rendered Cluster (no barmanObjectStore at all).
+    enabled: true
     method: "barmanObjectStore"
     endpointURL: "https://s3.fr-par.scw.cloud"
     provider: "s3"
+    s3:
+      # Bucket the barman backups are stored in. Required by the cluster chart
+      # when `destinationPath` is not set - without it rendering fails with
+      # "You need to specify S3 bucket if destinationPath is not specified".
+      bucket: "lisa-db-backups"
+      path: "/"
     data:
       compression: "gzip"
       encryption: ""
@@ -635,6 +662,37 @@ extraObjects:
   #
   # Per-env overrides (minReplicaCount, maxReplicaCount, pollingInterval, listLength) live
   # in `values-<env>.yaml` under `extraObjects.<name>.spec`.
+
+  # NetworkPolicy: allows the KEDA operator (namespace `keda-system`) to reach the Redis pods
+  # on port 6379. Without this, a default-deny namespace policy (common on DSO/managed
+  # platforms) silently drops the KEDA scaler's TCP SYN, producing:
+  #   "failed to ensure HPA ... dial tcp <redis-ip>:6379: i/o timeout"
+  # The DNS resolves (the Service IP is returned) but the connection never completes.
+  # KEDA runs in its own namespace, so a namespaceSelector on `kubernetes.io/metadata.name:
+  # keda-system` is the most robust match (works regardless of pod labels in keda-system).
+  lisa-redis-keda-netpol:
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: lisa-redis-allow-keda
+    spec:
+      # The Redis pods carry the RELEASE name as `instance` (not the service name `lisa-redis`):
+      # a selector on `lisa-redis` matches no pod, the allow rule then does nothing, and KEDA's
+      # connection still times out.
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: redis
+          app.kubernetes.io/instance: "{{ .Release.Name }}"
+      policyTypes:
+      - Ingress
+      ingress:
+      - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: keda-system
+        ports:
+        - protocol: TCP
+          port: 6379
 
   # TriggerAuthentication: shared by all the worker ScaledObjects.
   lisa-keda-triggerauth:

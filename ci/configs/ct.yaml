@@ -4,6 +4,12 @@ target-branch: main
 # of a chart-dir that holds a Chart.yaml as a chart.
 chart-dirs:
 - deploy/helm
+# ct runs 'helm dependency build' before linting, which resolves the
+# chart's dependencies from their repositories: the CNPG subchart comes
+# from an HTTPS repo that must be declared here (the OCI dependencies
+# from cloudpirates resolve without a repo entry).
+chart-repos:
+- cloudnative-pg=https://cloudnative-pg.github.io/charts
 helm-extra-args: ''
 validate-chart-schema: true
 validate-chart-values: true

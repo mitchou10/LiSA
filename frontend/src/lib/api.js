@@ -1,9 +1,16 @@
 // Minimal API client for the LiSA backend.
+// VITE_API_URL is fixed at build time. Unset: local development (backend on
+// :8000). Set to an empty string: same origin, for when the API is served on
+// the same host as the app (calls go to /api/v1/...).
 const BASE_URL = (
-  import.meta.env.VITE_API_URL || "http://localhost:8000"
+  import.meta.env.VITE_API_URL ?? "http://localhost:8000"
 ).replace(/\/$/, "");
 
 const API_V1 = `${BASE_URL}/api/v1`;
+
+// Dev-only: when the backend runs with a service token and no Keycloak, this
+// value is sent as a Bearer token so the API accepts the calls.
+const DEV_SERVICE_TOKEN = import.meta.env.VITE_DEV_SERVICE_TOKEN || "";
 
 async function request(path, options = {}) {
   const res = await fetch(`${API_V1}${path}`, {
@@ -12,6 +19,7 @@ async function request(path, options = {}) {
     ...options,
     headers: {
       "Content-Type": "application/json",
+      ...(DEV_SERVICE_TOKEN ? { Authorization: `Bearer ${DEV_SERVICE_TOKEN}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -39,7 +47,7 @@ async function request(path, options = {}) {
 }
 
 export async function getHealth() {
-  const res = await fetch(`${BASE_URL}/health`);
+  const res = await fetch(`${API_V1}/health`);
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
@@ -131,6 +139,27 @@ export async function getTasksPage({
 export async function getTasks(params = {}) {
   const page = await getTasksPage({ limit: 200, ...params });
   return Array.isArray(page) ? page : (page?.items ?? []);
+}
+
+// Get tasks for the current authenticated user.
+export async function getMyTasks({
+  status,
+  serviceId,
+  projectId,
+  rootsOnly,
+  limit = 50,
+  offset = 0,
+} = {}) {
+  const query = buildQuery({
+    status,
+    service_id: serviceId,
+    project_id: projectId,
+    roots_only: rootsOnly,
+    limit,
+    offset,
+  });
+  const data = await request(`/tasks/me${query}`);
+  return toPage(data, { limit, offset });
 }
 
 export async function getTaskChildren(taskId) {
@@ -233,6 +262,9 @@ export async function uploadFile(file) {
   const res = await fetch(`${API_V1}/files`, {
     method: "POST",
     credentials: "include",
+    headers: {
+      ...(DEV_SERVICE_TOKEN ? { Authorization: `Bearer ${DEV_SERVICE_TOKEN}` } : {}),
+    },
     body, // the browser sets the multipart Content-Type itself
   });
   if (!res.ok) {
@@ -255,15 +287,78 @@ export async function uploadFile(file) {
 export const startRun = (projectId, body) =>
   request(`/projects/${projectId}/runs`, json("POST", body));
 
+// Start a default run: the same analysis without any project. The seeded
+// defaults (PII entities, safety checks) are applied, nothing to select.
+export const startDefaultRun = (body) =>
+  request("/tasks/runs", json("POST", body));
+
 // The screenshot of a page parsed by a parser task, as a blob URL (the caller
 // revokes it). 410 means the image was deleted from storage.
 export async function fetchPageImage(parserTaskId, pageNumber) {
   const res = await fetch(
     `${API_V1}/tasks/${parserTaskId}/pages/${pageNumber}/image`,
-    { credentials: "include" }
+    {
+      credentials: "include",
+      headers: {
+        ...(DEV_SERVICE_TOKEN ? { Authorization: `Bearer ${DEV_SERVICE_TOKEN}` } : {}),
+      },
+    }
   );
   if (!res.ok) {
     const error = new Error(`${res.status} ${res.statusText}`);
+    error.status = res.status;
+    throw error;
+  }
+  return URL.createObjectURL(await res.blob());
+}
+
+// The boxes users drew on the pages of a run (blurred on export, kept for
+// the metrics). Coordinates are fractions of the page, 0 to 1.
+async function bboxRequest(runId, path, init = {}) {
+  const res = await fetch(`${API_V1}/tasks/${runId}/bboxes${path}`, {
+    credentials: "include",
+    ...init,
+    headers: {
+      ...(init.body ? { "Content-Type": "application/json" } : {}),
+      ...(DEV_SERVICE_TOKEN ? { Authorization: `Bearer ${DEV_SERVICE_TOKEN}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    const error = new Error(`${res.status} ${res.statusText}`);
+    error.status = res.status;
+    throw error;
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+export const listPageBboxes = (runId) => bboxRequest(runId, "");
+export const addPageBbox = (runId, box) =>
+  bboxRequest(runId, "", { method: "POST", body: JSON.stringify(box) });
+export const deletePageBbox = (runId, bboxId) =>
+  bboxRequest(runId, `/${bboxId}`, { method: "DELETE" });
+
+// Export the pages of a finished file run: blurred entities, boxes, labels,
+// as PNG (one page), ZIP or PDF (every page). Returns a blob URL the caller
+// revokes after the download.
+export async function renderRunDocument(runId, body) {
+  const res = await fetch(`${API_V1}/tasks/${runId}/render`, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(DEV_SERVICE_TOKEN ? { Authorization: `Bearer ${DEV_SERVICE_TOKEN}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const payload = await res.json();
+      if (payload?.detail) detail = payload.detail;
+    } catch {
+      /* ignore non-JSON error bodies */
+    }
+    const error = new Error(detail);
     error.status = res.status;
     throw error;
   }

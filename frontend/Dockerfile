@@ -6,14 +6,16 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-ARG VITE_API_URL=http://localhost:8000
+# Public URL of the API, fixed in the bundle at build time. Empty (default): same origin, i.e. the
+# API is served on the same host as the app under /api. Set it when the API lives on another host.
+ARG VITE_API_URL=""
 ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 # nginxinc/nginx-unprivileged already runs as the unprivileged `nginx` user
 # (uid 101) and listens on 8080 instead of 80, so no extra USER/port setup
 # is required to get a non-root container.
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.31-alpine AS runtime
 # The base image only gets rebuilt now and then: pull in the Alpine fixes published since (openssl,
 # zlib, musl...). It needs root, which the base image doesn't run as - dropped again right after.
 USER root

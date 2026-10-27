@@ -40,8 +40,10 @@ RUN useradd --system --create-home --uid 10001 --home-dir /app app \
 COPY --from=builder --chown=app:app /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=builder --chown=app:app /usr/local/bin /usr/local/bin
 COPY --from=builder --chown=app:app /app/app /app/app
-# Tesseract traineddata is downloaded by warmup to /root/.tesseract-rs, not /opt/hf.
-COPY --from=builder --chown=app:app /root/.tesseract-rs /root/.tesseract-rs
+# Tesseract traineddata is downloaded by warmup to /root/.tesseract-rs (not /opt/hf). The worker runs
+# as `app` (HOME=/app), which can neither read /root nor look there: the data goes where LiteParse
+# looks for it, ~/.tesseract-rs, or it would download it again at runtime.
+COPY --from=builder --chown=app:app /root/.tesseract-rs /app/.tesseract-rs
 USER app
 
 HEALTHCHECK --interval=60s --timeout=20s --start-period=120s --retries=3 \
