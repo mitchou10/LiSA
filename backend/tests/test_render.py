@@ -416,3 +416,26 @@ async def test_a_drawn_box_is_blurred_on_export(
     img = Image.open(io.BytesIO(resp.content))
     colours = img.crop((220, 30, 260, 80)).getcolors(maxcolors=100000)
     assert colours is None or len(colours) > 1
+
+
+async def test_entities_off_blurs_only_the_drawn_boxes(
+    client, admin_headers, project, sent, objects
+):
+    run_id = await _file_run(client, admin_headers, project, sent)
+    # Without a drawn box, leaving the entities alone changes nothing.
+    untouched = await _render(
+        client, admin_headers, run_id, page_numbers=[1], format="png", entities=False
+    )
+    assert untouched.content == objects["pages/t/1/1.png"]
+    # A box with no label, tied to no entity, is still blurred.
+    await client.post(
+        _url(run_id),
+        json={"page_number": 1, "x": 0.0, "y": 0.1, "width": 0.7, "height": 0.4},
+        headers=admin_headers,
+    )
+    resp = await _render(
+        client, admin_headers, run_id, page_numbers=[1], format="png", entities=False
+    )
+    img = Image.open(io.BytesIO(resp.content))
+    colours = img.crop((40, 40, 240, 70)).getcolors(maxcolors=100000)
+    assert colours is None or len(colours) > 1
