@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.1](https://github.com/mitchou10/LiSA/compare/v1.7.0...v1.7.1) (2026-10-27)
+
+
+### Bug Fixes
+
+* let the page toolbar wrap instead of overlapping the entity list ([398f47e](https://github.com/mitchou10/LiSA/commit/398f47eb600e6092172cb53ca0d7cf022eea6aba))
+* reload the current page when clicking its tab, unless work is in progress ([89e3b34](https://github.com/mitchou10/LiSA/commit/89e3b34b71cfa3a7f4b3f80243c7ddf3adfc5970))
+
 ## [1.7.0](https://github.com/mitchou10/LiSA/compare/v1.6.0...v1.7.0) (2026-10-27)
 
 
