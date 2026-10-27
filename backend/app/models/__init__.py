@@ -9,6 +9,7 @@ from app.models.catalog import (
 from app.models.detection_profile import DetectionProfile, DetectionProfileVersion
 from app.models.enums import Action, ServiceType, Severity, TaskStatus, UserRole
 from app.models.file import StoredFile
+from app.models.page_bbox import PageBbox
 from app.models.project import Project
 from app.models.service import Service
 from app.models.task import Task
@@ -20,6 +21,7 @@ __all__ = [
     "DetectionProfile",
     "DetectionProfileVersion",
     "EntityDefinition",
+    "PageBbox",
     "Project",
     "RelationDefinition",
     "SafetyDefinition",
