@@ -8,11 +8,13 @@ import {
   FileText,
   ImageOff,
   Loader2,
+  PencilRuler,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { usePageImage } from "../../hooks/usePageImage";
+import { usePageBboxes } from "../../hooks/usePageBboxes";
 import { renderRunDocument } from "../../lib/api";
 import { buildPages, colorFor, isAnonymizing, segments } from "../../lib/runModel";
 import { cn } from "../../lib/utils";
@@ -65,9 +67,47 @@ export function highlights(page, layers, masked) {
 }
 
 /** The page screenshot with the boxes of every highlight drawn on it. */
-export function PageImage({ page, items, activeId, onActive }) {
+export function PageImage({
+  page,
+  items,
+  activeId,
+  onActive,
+  drawn = [],
+  drawMode = false,
+  onDraw,
+  onDeleteDrawn,
+}) {
   const { t } = useI18n();
   const { url, error, loading } = usePageImage(page.image);
+  // The box being dragged, in fractions of the page.
+  const [draft, setDraft] = useState(null);
+
+  const point = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return {
+      x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)),
+      y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)),
+    };
+  };
+  const boxOf = (a, b) => ({
+    x: Math.min(a.x, b.x),
+    y: Math.min(a.y, b.y),
+    width: Math.abs(a.x - b.x),
+    height: Math.abs(a.y - b.y),
+  });
+  const startDraw = (e) => {
+    if (!drawMode || e.target !== e.currentTarget) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    setDraft({ from: point(e), to: point(e) });
+  };
+  const moveDraw = (e) => draft && setDraft({ ...draft, to: point(e) });
+  const endDraw = (e) => {
+    if (!draft) return;
+    const box = boxOf(draft.from, point(e));
+    setDraft(null);
+    // A click, not a drag: ignore it.
+    if (box.width > 0.005 && box.height > 0.005) onDraw?.(box);
+  };
 
   if (loading)
     return (
@@ -84,8 +124,48 @@ export function PageImage({ page, items, activeId, onActive }) {
     );
   if (!url) return null;
   return (
-    <div className="relative overflow-hidden rounded-lg border border-border">
-      <img src={url} alt={`${t("run.page")} ${page.number}`} className="block w-full" />
+    <div
+      className={cn(
+        "relative overflow-hidden rounded-lg border border-border",
+        drawMode && "cursor-crosshair touch-none"
+      )}
+      onPointerDown={startDraw}
+      onPointerMove={moveDraw}
+      onPointerUp={endDraw}
+    >
+      <img
+        src={url}
+        alt={`${t("run.page")} ${page.number}`}
+        className="pointer-events-none block w-full select-none"
+        draggable={false}
+      />
+      {drawn.map((b) => (
+        <button
+          type="button"
+          key={b.id}
+          title={drawMode ? t("run.doc.drawHint") : b.label || ""}
+          disabled={!drawMode}
+          onClick={() => onDeleteDrawn?.(b.id)}
+          className="absolute border-2 border-neutral-900 bg-neutral-900/35 disabled:cursor-default"
+          style={{
+            left: `${b.x * 100}%`,
+            top: `${b.y * 100}%`,
+            width: `${b.width * 100}%`,
+            height: `${b.height * 100}%`,
+          }}
+        />
+      ))}
+      {draft && (
+        <div
+          className="pointer-events-none absolute border-2 border-dashed border-neutral-900 bg-neutral-900/20"
+          style={{
+            left: `${boxOf(draft.from, draft.to).x * 100}%`,
+            top: `${boxOf(draft.from, draft.to).y * 100}%`,
+            width: `${boxOf(draft.from, draft.to).width * 100}%`,
+            height: `${boxOf(draft.from, draft.to).height * 100}%`,
+          }}
+        />
+      )}
       {items.flatMap((h) =>
         h.bboxes.map((b, i) => (
           <button
@@ -380,12 +460,16 @@ export default function RunDocument({ run, source }) {
   // The entities to blur on export, as "page:entity" ids (entity ids restart
   // on every page). Empty means every entity.
   const [selected, setSelected] = useState(new Set());
+  // The boxes users drew, kept in the database: blurred on export.
+  const { boxes: drawn, add: addDrawn, remove: removeDrawn } = usePageBboxes(run?.id);
+  const [drawMode, setDrawMode] = useState(false);
 
   // A new run starts on its first page, with nothing selected.
   const runId = run?.id;
   useEffect(() => {
     setIndex(0);
     setSelected(new Set());
+    setDrawMode(false);
   }, [runId]);
 
   const toggleEntity = (id) =>
@@ -515,7 +599,30 @@ export default function RunDocument({ run, source }) {
         <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <div className="space-y-3">
             {page.image && (
-              <PageImage page={page} items={items} activeId={activeId} onActive={setActiveId} />
+              <>
+                <label className="flex items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={drawMode}
+                    onChange={(e) => setDrawMode(e.target.checked)}
+                  />
+                  <PencilRuler className="h-4 w-4" />
+                  {t("run.doc.draw")}
+                  <span className="text-xs text-muted-foreground">
+                    · {t("run.doc.drawn").replace("{n}", drawn.filter((b) => b.page_number === page.number).length)}
+                  </span>
+                </label>
+                <PageImage
+                  page={page}
+                  items={items}
+                  activeId={activeId}
+                  onActive={setActiveId}
+                  drawn={drawn.filter((b) => b.page_number === page.number)}
+                  drawMode={drawMode}
+                  onDraw={(box) => addDrawn(page.number, box)}
+                  onDeleteDrawn={removeDrawn}
+                />
+              </>
             )}
             {page.anonymized !== null ? (
               <AnonymizedText content={page.anonymized} t={t} />
