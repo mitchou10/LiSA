@@ -1,8 +1,10 @@
 from fastapi import APIRouter
 from sqlalchemy import text
 
-from app.api.deps import SessionDep
+from app.api.deps import CurrentUserDep, SessionDep
+from app.config import get_settings
 from app.schemas.health import HealthRead
+from app.schemas.retention import RetentionRead
 
 router = APIRouter(tags=["health"])
 
@@ -16,3 +18,9 @@ async def health(session: SessionDep) -> HealthRead:
     except Exception:  # noqa: BLE001
         db_status = "error"
     return HealthRead(status="ok", database=db_status)
+
+
+@router.get("/retention")
+async def retention(_user: CurrentUserDep) -> RetentionRead:
+    """How long a finished run keeps its content before it is purged."""
+    return RetentionRead(days=get_settings().retention_days)

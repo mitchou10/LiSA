@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,6 +16,7 @@ from app.services.exceptions import (
     InvalidStateError,
     NotFoundError,
 )
+from app.services.purge import purge_loop
 
 settings = get_settings()
 
@@ -30,7 +32,19 @@ async def lifespan(_: FastAPI):
     if settings.run_migrations:
         await run_migrations()
     await _seed_detection_profiles()
-    yield
+    # Finished runs are purged once they are older than the retention.
+    purger = (
+        asyncio.create_task(purge_loop(async_session_factory))
+        if settings.retention_days > 0
+        else None
+    )
+    try:
+        yield
+    finally:
+        if purger is not None:
+            purger.cancel()
+            with suppress(asyncio.CancelledError):
+                await purger
 
 
 app = FastAPI(

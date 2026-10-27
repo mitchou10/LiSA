@@ -29,6 +29,7 @@ class RenderRequest(BaseModel):
     ``replace``: write the run's replacement texts (black on white) in place
     of the entities that have one, instead of blurring them.
     ``boxes``: draw each kept entity's box with its label above it.
+    ``purge_after``: purge the run's content once the file is rendered.
     """
 
     page_numbers: list[int] | None = None
@@ -38,6 +39,7 @@ class RenderRequest(BaseModel):
     replace: bool = False
     boxes: bool = False
     format: RenderFormat = "png"
+    purge_after: bool = False
 
 
 class RenderedDocument(BaseModel):

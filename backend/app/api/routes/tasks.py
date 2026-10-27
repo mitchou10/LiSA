@@ -15,6 +15,7 @@ from app.schemas.auth import CurrentUser
 from app.schemas.page_bbox import BoxGeometry, PageBboxCreate, PageBboxRead
 from app.schemas.pagination import Page
 from app.schemas.render import RenderRequest
+from app.schemas.retention import PurgeRead
 from app.schemas.run import DefaultRunCreate, RunRead
 from app.schemas.run_edit import (
     BoxOverrideRead,
@@ -23,6 +24,7 @@ from app.schemas.run_edit import (
     ReplacementSet,
 )
 from app.schemas.task import TaskRead, TaskStatusRead, TaskSubmit, TaskUpdate
+from app.services.purge import PurgeService
 from app.services.render import RenderError, RenderService
 from app.services.run import RunService
 
@@ -194,6 +196,8 @@ async def render_run_pages(
         rendered = await RenderService(session).render(task_id, payload)
     except RenderError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from None
+    if payload.purge_after:
+        await PurgeService(session).purge_run(task_id)
     return Response(
         content=rendered.data,
         media_type=rendered.media_type,
@@ -206,6 +210,24 @@ async def _own_run(service: TaskServiceDep, user: CurrentUser, run_id: UUID) -> 
     task = await service.get(run_id)
     if not (user.is_admin or task.user_id == user.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found.")
+
+
+@router.post("/{task_id}/purge", response_model=PurgeRead)
+async def purge_run_content(
+    task_id: UUID,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> PurgeRead:
+    """Purge what a run's documents said: texts, entities, page images.
+
+    The statistics stay (labels, scores, counts, durations). Cannot be undone.
+    """
+    await _own_run(service, user, task_id)
+    purged_at = await PurgeService(session).purge_run(task_id)
+    if purged_at is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Run not found.")
+    return PurgeRead(purged_at=purged_at)
 
 
 @router.get("/{task_id}/bboxes", response_model=list[PageBboxRead])

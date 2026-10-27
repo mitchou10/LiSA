@@ -60,7 +60,13 @@ export function useRunView(taskId) {
           loading: false,
           parent,
           isRun: steps.length > 0,
-          run: { id: parent.id, status: parent.status, duration: parent.duration_seconds, steps },
+          run: {
+            id: parent.id,
+            status: parent.status,
+            duration: parent.duration_seconds,
+            purgedAt: parent.purged_at,
+            steps,
+          },
           source: steps.some((s) => s.step === "parser")
             ? { kind: "files" }
             : {

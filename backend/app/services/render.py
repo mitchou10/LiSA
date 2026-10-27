@@ -177,6 +177,8 @@ class RenderService:
 
     async def render(self, run_id: UUID, request: RenderRequest) -> RenderedDocument:
         run = await self.tasks.get(run_id)
+        if run.purged_at is not None:
+            raise RenderError("The content of this run was purged.")
         parser, ner = await self._children(run)
         pages = [p for p in _pages_of(parser) if p.get("s3_key")]
         if not pages:
