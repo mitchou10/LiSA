@@ -220,7 +220,7 @@ export function PageImage({
         <button
           type="button"
           key={b.id}
-          title={[b.label, drawMode && t("run.doc.drawHint")].filter(Boolean).join(" · ")}
+          title={[b.label, drawMode && t("run.doc.removeBox")].filter(Boolean).join(" · ")}
           disabled={!drawMode}
           onClick={() => onDeleteDrawn?.(b.id)}
           className="absolute border-2 border-neutral-900 bg-neutral-900/35 disabled:cursor-default"

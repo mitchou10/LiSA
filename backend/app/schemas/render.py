@@ -24,11 +24,14 @@ class RenderRequest(BaseModel):
     needs exactly one page; ``zip`` and ``pdf`` take all the pages asked for.
     ``entity_ids``: the entities to blur or draw (None or []: all of them).
     ``blur``: nothing, the entities' boxes, or the whole page.
+    ``entities``: False leaves the entities alone (only the boxes users drew
+    are blurred); ``entity_ids`` is then ignored.
     ``boxes``: draw each kept entity's box with its label above it.
     """
 
     page_numbers: list[int] | None = None
     entity_ids: list[str] | None = None
+    entities: bool = True
     blur: BlurMode = "entities"
     boxes: bool = False
     format: RenderFormat = "png"

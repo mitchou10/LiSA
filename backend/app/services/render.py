@@ -203,7 +203,11 @@ class RenderService:
     ) -> Image.Image:
         """Blur and/or box the kept entities, with supervision."""
         keep = _selected(request.entity_ids)
-        kept = [e for e in entities if _keeps(e, page_number, keep)] + drawn
+        kept = (
+            [e for e in entities if _keeps(e, page_number, keep)]
+            if request.entities
+            else []
+        ) + drawn
         boxes: list[list[float]] = []
         labels: list[str] = []
         for e in kept:

@@ -29,13 +29,14 @@ const LAYERS = { entities: true, relations: false };
 const key = (page, entity) => `${page.number}:${entity.id}`;
 
 /** What to blur and how to download it. Only for runs that have page images. */
-function ExportBar({ run, page, total, checked, t }) {
+function ExportBar({ run, page, total, checked, drawnCount, t }) {
   const [blur, setBlur] = useState("entities");
   const [boxes, setBoxes] = useState(false);
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
 
-  const nothing = blur === "entities" && checked.size === 0;
+  // Boxes drawn by hand are blurred even when no entity is ticked.
+  const nothing = blur === "entities" && checked.size === 0 && drawnCount === 0;
 
   async function download(format) {
     setBusy(format);
@@ -43,8 +44,8 @@ function ExportBar({ run, page, total, checked, t }) {
     try {
       const body = { format, blur: nothing ? "none" : blur, boxes };
       if (format === "png") body.page_numbers = [page.number];
-      if (blur === "entities" && checked.size > 0 && checked.size < total)
-        body.entity_ids = [...checked];
+      if (blur === "entities" && checked.size === 0) body.entities = false;
+      else if (blur === "entities" && checked.size < total) body.entity_ids = [...checked];
       const url = await renderRunDocument(run.id, body);
       const a = document.createElement("a");
       a.href = url;
@@ -139,7 +140,8 @@ export default function ResultsViewer({ run, source }) {
   const [activeId, setActiveId] = useState(null);
   // Boxes drawn by hand on the page: blurred on export, kept for the metrics.
   const { boxes: drawn, add: addDrawn, remove: removeDrawn } = usePageBboxes(run?.id);
-  const [drawMode, setDrawMode] = useState(false);
+  // null, "label" (draw a box, then name it) or "blur" (draw a box to blur, nothing else).
+  const [drawMode, setDrawMode] = useState(null);
   // A box just drawn, waiting for its label: { pageNumber, box, url }.
   const [pending, setPending] = useState(null);
   const anonymizing = isAnonymizing(run);
@@ -231,15 +233,26 @@ export default function ResultsViewer({ run, source }) {
                 </div>
               )}
               {showImage && (
-                <Button
-                  size="sm"
-                  variant={drawMode ? "secondary" : "ghost"}
-                  onClick={() => setDrawMode(!drawMode)}
-                  title={t("run.doc.drawHint")}
-                >
-                  <PencilRuler className="h-4 w-4" />
-                  {t("run.doc.draw")}
-                </Button>
+                <>
+                  <Button
+                    size="sm"
+                    variant={drawMode === "blur" ? "secondary" : "ghost"}
+                    onClick={() => setDrawMode(drawMode === "blur" ? null : "blur")}
+                    title={t("run.doc.blurHint")}
+                  >
+                    <EyeOff className="h-4 w-4" />
+                    {t("run.doc.blur")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={drawMode === "label" ? "secondary" : "ghost"}
+                    onClick={() => setDrawMode(drawMode === "label" ? null : "label")}
+                    title={t("run.doc.drawHint")}
+                  >
+                    <PencilRuler className="h-4 w-4" />
+                    {t("run.doc.draw")}
+                  </Button>
+                </>
               )}
               {!anonymizing && (
                 <Button size="sm" variant="ghost" onClick={() => setMasked(!maskedByUser)}>
@@ -257,8 +270,12 @@ export default function ResultsViewer({ run, source }) {
               activeId={activeId}
               onActive={setActiveId}
               drawn={drawn.filter((b) => b.page_number === page.number)}
-              drawMode={drawMode}
-              onDraw={(box, url) => setPending({ pageNumber: page.number, box, url })}
+              drawMode={!!drawMode}
+              onDraw={(box, url) =>
+                drawMode === "blur"
+                  ? addDrawn(page.number, box)
+                  : setPending({ pageNumber: page.number, box, url })
+              }
               onDeleteDrawn={removeDrawn}
             />
           ) : page.anonymized !== null ? (
@@ -339,7 +356,14 @@ export default function ResultsViewer({ run, source }) {
       </div>
 
       {hasImages ? (
-        <ExportBar run={run} page={page} total={allKeys.length} checked={checked} t={t} />
+        <ExportBar
+          run={run}
+          page={page}
+          total={allKeys.length}
+          checked={checked}
+          drawnCount={drawn.length}
+          t={t}
+        />
       ) : (
         <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
           {t("wiz.results.exportText")}
