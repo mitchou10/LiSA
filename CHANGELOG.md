@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.7.0](https://github.com/mitchou10/LiSA/compare/v1.6.0...v1.7.0) (2026-10-27)
+
+
+### Features
+
+* purge the content of runs, on request, with an export, and after a delay ([c23ea2a](https://github.com/mitchou10/LiSA/commit/c23ea2aab10c2bfd3f056686c3a475eb1dd93749))
+
+
+### Bug Fixes
+
+* keep document content out of the logs ([43c6d11](https://github.com/mitchou10/LiSA/commit/43c6d11c302ee7b828e2582ea159528c30508129))
+
 ## [1.6.0](https://github.com/mitchou10/LiSA/compare/v1.5.1...v1.6.0) (2026-10-27)
 
 
