@@ -6,7 +6,10 @@ from fastapi import APIRouter, HTTPException, Query, Response, status
 from app.api.deps import AdminDep, CurrentUserDep, SessionDep, TaskServiceDep
 from app.core import storage
 from app.models.enums import TaskStatus
+from app.models.page_bbox import PageBbox
+from app.repositories.page_bbox import PageBboxRepository
 from app.schemas.auth import CurrentUser
+from app.schemas.page_bbox import PageBboxCreate, PageBboxRead
 from app.schemas.pagination import Page
 from app.schemas.render import RenderRequest
 from app.schemas.run import DefaultRunCreate, RunRead
@@ -187,6 +190,64 @@ async def render_run_pages(
         media_type=rendered.media_type,
         headers={"Content-Disposition": f'attachment; filename="{rendered.filename}"'},
     )
+
+
+async def _own_run(service: TaskServiceDep, user: CurrentUser, run_id: UUID) -> None:
+    """404 unless the run is the caller's (or the caller is an admin)."""
+    task = await service.get(run_id)
+    if not (user.is_admin or task.user_id == user.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Task not found.")
+
+
+@router.get("/{task_id}/bboxes", response_model=list[PageBboxRead])
+async def list_page_bboxes(
+    task_id: UUID,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+    page_number: Annotated[int | None, Query(ge=1)] = None,
+) -> list[PageBbox]:
+    """The boxes drawn on the pages of a run (one page, or all of them)."""
+    await _own_run(service, user, task_id)
+    return await PageBboxRepository(session).list_for_run(task_id, page_number)
+
+
+@router.post(
+    "/{task_id}/bboxes",
+    response_model=PageBboxRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_page_bbox(
+    task_id: UUID,
+    payload: PageBboxCreate,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> PageBbox:
+    """Draw a box on a page: it is blurred on export and kept for the metrics."""
+    await _own_run(service, user, task_id)
+    bbox = await PageBboxRepository(session).add(
+        PageBbox(run_id=task_id, created_by=user.id, **payload.model_dump())
+    )
+    await session.commit()
+    return bbox
+
+
+@router.delete("/{task_id}/bboxes/{bbox_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_page_bbox(
+    task_id: UUID,
+    bbox_id: UUID,
+    service: TaskServiceDep,
+    session: SessionDep,
+    user: CurrentUserDep,
+) -> None:
+    await _own_run(service, user, task_id)
+    repo = PageBboxRepository(session)
+    bbox = await repo.get(bbox_id)
+    if bbox is None or bbox.run_id != task_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Box not found.")
+    await repo.delete(bbox)
+    await session.commit()
 
 
 @router.get("/{task_id}/children", response_model=list[TaskRead])
