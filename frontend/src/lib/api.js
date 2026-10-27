@@ -371,6 +371,20 @@ export const setBoxOverride = (runId, override) =>
 export const deleteBoxOverride = (runId, id) =>
   editRequest(runId, "box-overrides", `/${id}`, { method: "DELETE" });
 
+// Purge what a run's documents said (texts, entities, page images): the
+// statistics stay. Cannot be undone.
+export const purgeRun = (runId) => editRequest(runId, "purge", "", { method: "POST" });
+
+// How many days a finished run keeps its content before it is purged (0: until purged by hand).
+export async function getRetentionDays() {
+  const res = await fetch(`${API_V1}/retention`, {
+    credentials: "include",
+    headers: { ...(DEV_SERVICE_TOKEN ? { Authorization: `Bearer ${DEV_SERVICE_TOKEN}` } : {}) },
+  });
+  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+  return (await res.json()).days;
+}
+
 // Export the pages of a finished file run: blurred entities, boxes, labels,
 // as PNG (one page), ZIP or PDF (every page). Returns a blob URL the caller
 // revokes after the download.

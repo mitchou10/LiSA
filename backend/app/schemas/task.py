@@ -44,6 +44,7 @@ class TaskRead(BaseModel):
     updated_at: datetime
     started_at: datetime | None = None
     finished_at: datetime | None = None
+    purged_at: datetime | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

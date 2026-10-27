@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     # Redis pub/sub channel used to tell workers a detection profile changed.
     profile_channel: str = "lisa:detection-profiles"
 
+    # How long the content of a finished run is kept: after this many days its
+    # texts, entities and page images are purged (the statistics stay). 0 keeps
+    # everything until it is purged by hand.
+    retention_days: int = 7
+    # How often the purge looks for runs past that age.
+    purge_interval_seconds: int = 3600
+
     # CORS
     cors_origins: list[str] = ["*"]
 

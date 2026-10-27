@@ -39,6 +39,8 @@ app/
 
 Uploaded files live in the `S3_BUCKET` bucket (`S3_ENDPOINT_URL`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `MAX_UPLOAD_MB`); the database only keeps their metadata. Only the backend talks to the object store: workers fetch their input through `GET /files/{id}/content` with the service token. A task refers to a file with `{"file_id": "...", "filename": "..."}`; the parser deletes the source once parsed (`DELETE_SOURCE_AFTER_PARSE`).
 
+**Retention.** What a run's documents said (texts, entities, page images, file names, the replacement texts users set) is kept `RETENTION_DAYS` days after the run ends (default 7, `0` = until purged by hand), then purged, checked every `PURGE_INTERVAL_SECONDS`. A purge masks the texts with `*`, drops the image keys and deletes the images and the uploaded file from storage; task rows, labels, scores, offsets, boxes, durations and the boxes users drew stay, so the dashboard keeps its numbers. It can also be done on request (`POST /tasks/{run_id}/purge`) or with an export (`purge_after` in the render request). A purged run can no longer be rendered.
+
 Interactive docs at `/docs`.
 
 ## Run

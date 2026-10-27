@@ -11,14 +11,16 @@ import {
   Loader2,
   Move,
   PencilRuler,
+  Trash2,
 } from "lucide-react";
 import { Button } from "../../ui/button";
 import { Badge } from "../../ui/badge";
 import { Input } from "../../ui/input";
 import { useEntityLabels } from "../../../hooks/useEntityLabels";
 import { usePageBboxes } from "../../../hooks/usePageBboxes";
+import { useRetentionDays } from "../../../hooks/useRetention";
 import { useRunEdits } from "../../../hooks/useRunEdits";
-import { renderRunDocument } from "../../../lib/api";
+import { purgeRun, renderRunDocument } from "../../../lib/api";
 import { buildPages, colorFor, isAnonymizing } from "../../../lib/runModel";
 import { distinctTexts, overrideKey, replacementKey, withOverrides } from "../../../lib/runEdits";
 import { cn } from "../../../lib/utils";
@@ -33,11 +35,13 @@ const LAYERS = { entities: true, relations: false };
 const key = (page, entity) => `${page.number}:${entity.id}`;
 
 /** What to blur and how to download it. Only for runs that have page images. */
-function ExportBar({ run, page, total, checked, drawnCount, hasReplacements, t }) {
+function ExportBar({ run, page, total, checked, drawnCount, hasReplacements, onPurged, t }) {
   const [blur, setBlur] = useState("entities");
   const [boxes, setBoxes] = useState(false);
   // The replacement texts are applied when asked, at each export.
   const [replace, setReplace] = useState(true);
+  // Once the file is made, purge the run: for the last export of a document.
+  const [purgeAfter, setPurgeAfter] = useState(false);
   const [busy, setBusy] = useState(null);
   const [error, setError] = useState(null);
 
@@ -48,7 +52,7 @@ function ExportBar({ run, page, total, checked, drawnCount, hasReplacements, t }
     setBusy(format);
     setError(null);
     try {
-      const body = { format, blur: nothing ? "none" : blur, boxes, replace: replace && hasReplacements };
+      const body = { format, blur: nothing ? "none" : blur, boxes, replace: replace && hasReplacements, purge_after: purgeAfter };
       if (format === "png") body.page_numbers = [page.number];
       if (blur === "entities" && checked.size === 0) body.entities = false;
       else if (blur === "entities" && checked.size < total) body.entity_ids = [...checked];
@@ -60,6 +64,7 @@ function ExportBar({ run, page, total, checked, drawnCount, hasReplacements, t }
       a.click();
       a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 5000);
+      if (purgeAfter) onPurged(new Date().toISOString());
     } catch (e) {
       setError(e.message);
     } finally {
@@ -133,11 +138,64 @@ function ExportBar({ run, page, total, checked, drawnCount, hasReplacements, t }
           </span>
         </label>
       )}
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" className="mt-1" checked={purgeAfter} onChange={(e) => setPurgeAfter(e.target.checked)} />
+        <span>
+          {t("wiz.purge.after")}
+          <span className="block text-xs text-muted-foreground">{t("wiz.purge.after.hint")}</span>
+        </span>
+      </label>
       <label className="flex items-center gap-2 text-sm text-muted-foreground">
         <input type="checkbox" checked={boxes} onChange={(e) => setBoxes(e.target.checked)} />
         {t("run.doc.boxes")}
       </label>
       {error && <p className="text-sm text-destructive">{error}</p>}
+    </section>
+  );
+}
+
+/**
+ * What happens to the run's data: kept for a while, then purged (texts,
+ * entities, page images; the statistics stay). It can be purged by hand.
+ */
+function Retention({ run, purgedAt, onPurged, t }) {
+  const days = useRetentionDays();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function purge() {
+    if (!window.confirm(t("wiz.purge.confirm"))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const done = await purgeRun(run.id);
+      onPurged(done.purged_at);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (purgedAt)
+    return (
+      <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
+        {t("wiz.purge.done").replace("{date}", new Date(purgedAt).toLocaleString())}
+      </p>
+    );
+  return (
+    <section className="flex flex-wrap items-center gap-3 rounded-xl border border-border p-4">
+      <div className="min-w-0 flex-1 text-sm">
+        <div className="font-medium">{t("wiz.purge.title")}</div>
+        <p className="text-muted-foreground">
+          {days > 0 ? t("wiz.purge.keep").replace("{n}", days) : t("wiz.purge.keepForever")}
+        </p>
+        {error && <p className="text-destructive">{error}</p>}
+      </div>
+      <Button variant="outline" size="sm" disabled={busy} onClick={purge}>
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+        {t("wiz.purge.now")}
+      </Button>
     </section>
   );
 }
@@ -200,6 +258,9 @@ export default function ResultsViewer({ run, source }) {
   // Boxes drawn by hand on the page: blurred on export, kept for the metrics.
   const { boxes: drawn, add: addDrawn, move: moveDrawn, remove: removeDrawn } = usePageBboxes(run?.id);
   const edits = useRunEdits(run?.id);
+  // When the run's content was purged (set here right after a purge).
+  const [purgedAt, setPurgedAt] = useState(run?.purgedAt ?? null);
+  useEffect(() => setPurgedAt(run?.purgedAt ?? null), [run?.id, run?.purgedAt]);
   // The boxes users corrected stand in for the detected ones everywhere.
   const pages = useMemo(() => withOverrides(detected, edits.overrides), [detected, edits.overrides]);
   // null, "label" (draw a box, then name it), "blur" (draw a box to blur) or
@@ -445,7 +506,7 @@ export default function ResultsViewer({ run, source }) {
         </aside>
       </div>
 
-      {hasImages ? (
+      {hasImages && !purgedAt && (
         <ExportBar
           run={run}
           page={page}
@@ -453,13 +514,17 @@ export default function ResultsViewer({ run, source }) {
           checked={checked}
           drawnCount={drawn.length}
           hasReplacements={edits.replacements.size > 0}
+          onPurged={setPurgedAt}
           t={t}
         />
-      ) : (
+      )}
+      {!hasImages && (
         <p className="rounded-lg border border-dashed border-border p-3 text-sm text-muted-foreground">
           {t("wiz.results.exportText")}
         </p>
       )}
+
+      <Retention run={run} purgedAt={purgedAt} onPurged={setPurgedAt} t={t} />
 
       <DrawBoxDialog
         pending={pending}
