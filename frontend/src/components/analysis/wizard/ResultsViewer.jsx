@@ -344,7 +344,7 @@ export default function ResultsViewer({ run, source }) {
                 </Button>
               </>
             )}
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
               {page.image && (
                 <div className="inline-flex rounded-lg bg-muted p-0.5 text-sm">
                   {[
