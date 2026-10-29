@@ -27,9 +27,12 @@ orientation of each page.
     words overlapping that range. Every box also carries `model`, the engine
     that produced it: `liteparse` (the PDF's own text layer) or `tesseract` or `paddleocr` (OCR). The page's own `width` / `height` (page units, e.g.
     PDF points) are kept to recover absolute positions.
-  - `orientation` is the clockwise rotation (0, 90, 180, 270) the page had in the
-    source and that was undone: text, boxes and screenshot are upright. Always 0
-    unless `OCR_ENGINE=paddleocr`.
+  - `orientation` is the clockwise rotation (0, 90, 180, 270) detected on a scanned
+    page (always 0 unless `OCR_ENGINE=paddleocr`). The page is **not** turned: the
+    screenshot, text and boxes stay as in the source. Every box carries `angle`,
+    the clockwise rotation of its text; the box itself stays an axis-aligned
+    fraction of the page, so the `ner`, `relation` and `safety` entity boxes
+    carry the `angle` too, and the replacement text written in a box follows it.
   - `s3_key` is `pages/<task>/<file>/<source page>.png`, the page screenshot
     in object storage (the task fails if `S3_BUCKET` is not configured).
 
@@ -39,7 +42,7 @@ orientation of each page.
 |---|---|---|
 | `OCR_LANGUAGE` | `eng+fra` | Tesseract languages (also a build arg, baked into the image) |
 | `OCR_ENGINE` | `tesseract` | `tesseract` or `paddleocr` (PP-OCRv5 via ONNX Runtime; build the image with `--build-arg OCR_ENGINE=paddleocr`, which installs the `paddle` extra and bakes the models in) |
-| `DETECT_ORIENTATION` | `true` | PaddleOCR only: classify each page (PP-LCNet doc orientation) and turn it upright before reading it |
+| `DETECT_ORIENTATION` | `true` | PaddleOCR only: classify each scanned page (PP-LCNet doc orientation) and read it upright; boxes are mapped back onto the page as it is, with their `angle` |
 | `ORIENTATION_MIN_SCORE` | `0.6` | Below this classifier score the page is left as it is |
 | `PADDLE_MODELS_DIR` | `/models` | Folder of the ONNX models (`PADDLE_DET_MODEL`, `PADDLE_REC_MODEL`, `PADDLE_ORIENTATION_MODEL` name the sub-folders); `PADDLE_THREADS` (2) sets ONNX Runtime's threads |
 | `MAX_FILE_MB` | `10` | Per-file size limit |

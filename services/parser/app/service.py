@@ -21,7 +21,7 @@ from worker.core.services.base import BaseService, TaskStatus
 
 from app.config import settings
 from app.errors import ParserError, StorageError
-from app.imaging import blur_png, upright_png
+from app.imaging import blur_png, rotate_box, upright_png
 from app.layout import build_page
 from app.paddle import OCR_MODEL as PADDLE_MODEL
 from app.paddle import PaddleEngine
@@ -43,6 +43,11 @@ _EXT_BY_MIME = {
 def _suffix(filename: str, mime: str | None) -> str:
     ext = os.path.splitext(filename)[1].lower()
     return ext or _EXT_BY_MIME.get((mime or "").lower(), "")
+
+
+def _is_scanned(parsed: Any) -> bool:
+    """A page without any text layer: only OCR can read it."""
+    return not any(item.text.strip() for item in parsed.text_items)
 
 
 class ParserService(BaseService):
@@ -95,12 +100,13 @@ class ParserService(BaseService):
     def _parse_with_paddle(
         self, path: str
     ) -> tuple[Any, dict[int, Any], dict[int, int]]:
-        """LiteParse without OCR, then the orientation of every page.
+        """LiteParse without OCR, then the orientation of the scanned pages.
 
-        Returns the parse result (turned upright by LiteParse for the pages
-        that need it), the page screenshots (upright, unblurred) and the
-        rotation found per page. The text layer is read by LiteParse; the
-        pages without one are read by PaddleOCR in ``parse_file``.
+        Returns the parse result, the page screenshots and the rotation found
+        per page. Nothing is turned: text, boxes and screenshots stay in the
+        orientation of the source, and each box says its text's angle. The
+        text layer is read by LiteParse; the pages without one are read by
+        PaddleOCR in ``parse_file``.
         """
         native = LiteParse(
             ocr_enabled=False,
@@ -108,33 +114,37 @@ class ParserService(BaseService):
             max_pages=settings.MAX_PAGES,
             quiet=True,
         )
+        result = native.parse(path)
         shots = {s.page_num: s for s in native.screenshot(path)}
         angles = {
-            num: self.paddle.orientation(shot.image_bytes)
-            for num, shot in shots.items()
-            if num <= settings.MAX_PAGES
+            page.page_num: self.paddle.orientation(shots[page.page_num].image_bytes)
+            for page in result.pages[: settings.MAX_PAGES]
+            if page.page_num in shots and _is_scanned(page)
         }
-        corrections = [(num, angle) for num, angle in angles.items() if angle]
-        if corrections:
-            native = LiteParse(
-                ocr_enabled=False,
-                emit_word_boxes=True,
-                max_pages=settings.MAX_PAGES,
-                quiet=True,
-                page_orientation_corrections=corrections,
-            )
-        for num, angle in angles.items():
-            if angle:
-                shots[num].image_bytes = upright_png(shots[num].image_bytes, angle)
-        return native.parse(path), shots, angles
+        return result, shots, angles
 
-    def _ocr_page(self, parsed: Any, image_bytes: bytes) -> Any:
-        """PaddleOCR lines of an upright page image, in the page's own units."""
-        items, (img_w, img_h) = self.paddle.read(image_bytes)
-        sx, sy = parsed.width / img_w, parsed.height / img_h
+    def _ocr_page(self, parsed: Any, image_bytes: bytes, angle: int) -> Any:
+        """PaddleOCR lines of a page image, in the page's own units.
+
+        The page is read upright; the boxes are then mapped back onto the page
+        as it is, and carry the ``angle`` of their text.
+        """
+        items, (img_w, img_h) = self.paddle.read(
+            upright_png(image_bytes, angle) if angle else image_bytes
+        )
         for item in items:
-            item.x, item.width = item.x * sx, item.width * sx
-            item.y, item.height = item.y * sy, item.height * sy
+            x, y, w, h = rotate_box(
+                (
+                    item.x / img_w,
+                    item.y / img_h,
+                    item.width / img_w,
+                    item.height / img_h,
+                ),
+                angle,
+            )
+            item.x, item.width = x * parsed.width, w * parsed.width
+            item.y, item.height = y * parsed.height, h * parsed.height
+            item.angle = angle
         return items
 
     def parse_file(
@@ -182,17 +192,19 @@ class ParserService(BaseService):
             shot = shots.get(parsed.page_num)
             if use_paddle:
                 # No text layer: read the (unblurred) screenshot with PaddleOCR.
-                scanned = shot and not any(t.text.strip() for t in parsed.text_items)
+                angle = angles.get(parsed.page_num, 0)
                 try:
                     items = (
-                        self._ocr_page(parsed, shot.image_bytes) if scanned else None
+                        self._ocr_page(parsed, shot.image_bytes, angle)
+                        if shot and _is_scanned(parsed)
+                        else None
                     )
                 except ParserError:
                     raise
                 except Exception as exc:
                     raise ParserError(f"Cannot read '{filename}': {exc}") from exc
                 page = build_page(parsed, ocr_model=PADDLE_MODEL, items=items)
-                page.orientation = angles.get(parsed.page_num, 0)
+                page.orientation = angle
             else:
                 page = build_page(parsed)
             if shot:

@@ -560,3 +560,46 @@ async def test_move_a_drawn_box(client, admin_headers, project, sent):
         headers=admin_headers,
     )
     assert outside.status_code == 422
+
+
+@pytest.mark.parametrize("angle", [0, 90, 180, 270])
+def test_replacement_text_keeps_the_angle_of_the_text(angle):
+    """The text is written along the box: horizontally, or turned with the page."""
+    from app.services.render import _write_replacement
+
+    # A box that follows the text: wide when the text is flat, tall when turned.
+    box = [20.0, 20.0, 180.0, 60.0] if angle in (0, 180) else [20.0, 20.0, 60.0, 180.0]
+    img = Image.new("RGB", (200, 200), "grey")
+    _write_replacement(img, [(box, angle)], "ANON")
+    x1, y1, x2, y2 = (round(v) for v in box)
+    inner = img.crop((x1 + 6, y1 + 6, x2 - 6, y2 - 6)).convert("L")
+    dark = inner.point(lambda v: 255 if v < 100 else 0).getbbox()
+    assert dark is not None  # text was written
+    # The ink spreads along the text direction, not across it.
+    ink_w, ink_h = dark[2] - dark[0], dark[3] - dark[1]
+    assert (ink_h > ink_w) if angle in (90, 270) else (ink_w > ink_h)
+
+
+def test_a_corrected_box_keeps_the_angle():
+    from app.services.render import _with_overrides
+
+    entities = {
+        1: [
+            {
+                "id": "e0",
+                "bboxes": [
+                    {"x": 0.1, "y": 0.1, "width": 0.1, "height": 0.2, "angle": 90}
+                ],
+            }
+        ]
+    }
+    fixed = _with_overrides(
+        entities, {(1, "e0", 0): {"x": 0.2, "y": 0.2, "width": 0.1, "height": 0.2}}
+    )
+    assert fixed[1][0]["bboxes"][0] == {
+        "x": 0.2,
+        "y": 0.2,
+        "width": 0.1,
+        "height": 0.2,
+        "angle": 90,
+    }

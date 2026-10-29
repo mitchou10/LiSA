@@ -416,7 +416,9 @@ class TestPaddleOcr:
         assert {b["model"] for b in pages[0]["words"]} == {"liteparse"}
         assert paddle_service.fake_ocr.seen == []
 
-    def test_rotated_page_is_turned_upright(self, paddle_service, png_bytes):
+    def test_rotated_page_is_kept_and_its_boxes_say_the_angle(
+        self, paddle_service, png_bytes
+    ):
         from PIL import Image
 
         paddle_service.fake_classifier.label = "90"
@@ -424,16 +426,28 @@ class TestPaddleOcr:
         with Image.open(io.BytesIO(png_bytes)) as image:
             buf = io.BytesIO()
             image.rotate(-90, expand=True).save(buf, format="PNG")
+            rotated = image.rotate(-90, expand=True).size
         page = paddle_service.parse_file(
             "scan.png", "image/png", buf.getvalue(), key_prefix="p", blur=False
         )[0]
         assert page["orientation"] == 90
+        assert {b["angle"] for b in (*page["words"], *page["lines"])} == {90}
         stored = Image.open(
             io.BytesIO(paddle_service.storage.client.objects["p/1.png"])
         )
-        # Upright again: wider than tall, and OCR saw the upright image.
-        assert stored.width > stored.height
-        assert paddle_service.fake_ocr.seen == [stored.size]
+        # The screenshot is not straightened; OCR saw the upright page.
+        assert stored.size == rotated and stored.height > stored.width
+        assert paddle_service.fake_ocr.seen == [(rotated[1], rotated[0])]
+        # Fake box (90,20)-(450,80) of the upright 900x200 page, moved onto the
+        # page turned 90 degrees clockwise (200x900).
+        line = page["lines"][0]
+        assert line["x"] == pytest.approx(1 - 80 / 200)
+        assert line["y"] == pytest.approx(90 / 900)
+        assert line["width"] == pytest.approx(60 / 200)
+        assert line["height"] == pytest.approx(360 / 900)
+        # Words follow the text from top to bottom.
+        ys = [w["y"] for w in page["words"]]
+        assert ys == sorted(ys) and len(ys) == 2
 
     def test_unsure_classifier_leaves_the_page(self, paddle_service, png_bytes):
         paddle_service.fake_classifier.label = "180"
@@ -465,3 +479,24 @@ def test_upright_png_undoes_a_clockwise_rotation(png_bytes):
         original.rotate(-270, expand=True).save(buf, format="PNG")
     fixed = Image.open(io.BytesIO(upright_png(buf.getvalue(), 270))).convert("RGB")
     assert ImageChops.difference(original, fixed).getbbox() is None
+
+
+@pytest.mark.parametrize("angle", [0, 90, 180, 270])
+def test_rotate_box_matches_rotating_the_image(angle):
+    from app.imaging import rotate_box
+    from PIL import Image, ImageDraw
+
+    image = Image.new("L", (400, 200), 0)
+    ImageDraw.Draw(image).rectangle([40, 30, 139, 69], fill=255)  # x 0.1, y 0.15
+    turned = image.rotate(-angle, expand=True)
+    x, y, w, h = rotate_box((0.1, 0.15, 0.25, 0.2), angle)
+    left, top, right, bottom = turned.getbbox()
+    assert (left, top, right, bottom) == pytest.approx(
+        (
+            x * turned.width,
+            y * turned.height,
+            (x + w) * turned.width,
+            (y + h) * turned.height,
+        ),
+        abs=1,
+    )

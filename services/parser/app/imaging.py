@@ -30,3 +30,18 @@ def upright_png(image_bytes: bytes, angle: int) -> bytes:
         # PIL rotates counter-clockwise.
         image.rotate(angle, expand=True).save(out, format="PNG")
         return out.getvalue()
+
+
+def rotate_box(
+    box: tuple[float, float, float, float], angle: int
+) -> tuple[float, float, float, float]:
+    """Move a relative (x, y, width, height) box from the upright page onto the
+    page rotated ``angle`` degrees clockwise (0, 90, 180 or 270)."""
+    x, y, w, h = box
+    if angle == 90:
+        return 1 - y - h, x, h, w
+    if angle == 180:
+        return 1 - x - w, 1 - y - h, w, h
+    if angle == 270:
+        return y, 1 - x - w, h, w
+    return box
