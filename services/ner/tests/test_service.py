@@ -159,9 +159,24 @@ class TestEntities:
         fake.found = [RawEntity("email", "john@acme.com", 5, 18, 0.99)]
         out = service.process({"pages": [{"content": text, "words": words}]})
         (box,) = out["pages"][0]["entities"][0]["bboxes"]
-        assert box == pytest.approx(
-            {"x": 0.2, "y": 0.1, "width": 0.2, "height": 0.02, "angle": 0}
-        )
+        assert box["x"] == pytest.approx(0.2) and box["angle"] == 0
+        # Each box stands alone: its part of the text, and what the entity says.
+        assert (box["text"], box["start"], box["end"]) == ("john@acme.com", 5, 18)
+        assert box["label"] == "email" and box["score"] == 0.99
+        assert box["model"] and box["flagged"] is True
+
+    def test_each_line_of_an_entity_is_a_box_with_its_own_text(self, service, fake):
+        text = "Jean Dupont"
+        words = [
+            {"x": 0.1, "y": 0.1, "width": 0.1, "height": 0.02, "start": 0, "end": 4},
+            {"x": 0.1, "y": 0.3, "width": 0.1, "height": 0.02, "start": 5, "end": 11},
+        ]
+        fake.found = [RawEntity("email", text, 0, 11, 0.9)]
+        out = service.process({"pages": [{"content": text, "words": words}]})
+        first, second = out["pages"][0]["entities"][0]["bboxes"]
+        assert (first["text"], first["start"], first["end"]) == ("Jean", 0, 4)
+        assert (second["text"], second["start"], second["end"]) == ("Dupont", 5, 11)
+        assert first["label"] == second["label"] == "email"
 
     def test_the_parser_pages_are_accepted_as_they_are(self, service):
         page = {

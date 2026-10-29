@@ -17,14 +17,20 @@ def _across(word: InputWord) -> tuple[float, float]:
 
 
 def boxes_for_span(
-    words: list[InputWord], start: int, end: int, *, line_tolerance: float = 0.5
+    words: list[InputWord],
+    start: int,
+    end: int,
+    *,
+    content: str = "",
+    line_tolerance: float = 0.5,
 ) -> list[Box]:
     """One box per visual line covered by ``[start, end)``.
 
     Takes the words overlapping the span, groups the ones that sit on the same
     line (same text angle, and an overlap across the line above
     ``line_tolerance`` of the smaller thickness) and returns the union of each
-    group, with the angle of its text.
+    group, with the angle of its text. Given the page ``content``, each box also
+    says which part of the span it covers (``text``, ``start``, ``end``).
     """
     hit = sorted(
         (w for w in words if w.start < end and w.end > start),
@@ -45,7 +51,18 @@ def boxes_for_span(
         y1 = min(w.y for w in group)
         x2 = max(w.x + w.width for w in group)
         y2 = max(w.y + w.height for w in group)
+        first = max(start, min(w.start for w in group))
+        last = min(end, max(w.end for w in group))
         boxes.append(
-            Box(x=x1, y=y1, width=x2 - x1, height=y2 - y1, angle=group[0].angle)
+            Box(
+                x=x1,
+                y=y1,
+                width=x2 - x1,
+                height=y2 - y1,
+                angle=group[0].angle,
+                text=content[first:last] if content else None,
+                start=first,
+                end=last,
+            )
         )
     return boxes

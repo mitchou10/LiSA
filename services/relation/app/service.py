@@ -66,7 +66,7 @@ class RelationService(BaseService):
             start=raw.start,
             end=raw.end,
             score=raw.score,
-            bboxes=boxes_for_span(page.words, raw.start, raw.end),
+            bboxes=boxes_for_span(page.words, raw.start, raw.end, content=page.content),
         )
 
     def analyse_page(

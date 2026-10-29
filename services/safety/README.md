@@ -42,7 +42,9 @@ Italian, Portuguese, Dutch).
   `start`/`end` are character offsets into the page `content` (the same
   offsets as the parser's words, so a span can be redacted by the anonymize
   service). `bboxes` holds one relative (0-1) box per line the entity spans,
-  empty without `words`.
+  empty without `words`. Each box also carries its own `text`, `start`/`end` (the
+  part of the span on that line), the `angle` of its text, and the entity's
+  `label`, `score` and `model`.
 - **Long pages** are read in full: the model scans them in overlapping windows
   (`CHUNK_SIZE` words, `CHUNK_OVERLAP` shared words), see
   [GLiNER2 long context](https://github.com/fastino-ai/GLiNER2/blob/main/tutorial/12-long_context.md).

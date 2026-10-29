@@ -44,7 +44,10 @@ former `gliner` service.
   `start`/`end` are character offsets into the page `content` (the same offsets
   as the parser's words, so a span can be redacted by the anonymize service).
   `bboxes` holds one relative (0-1) box per line the entity spans, empty
-  without `words`. `flagged` is false for an `allow` label; the page and
+  without `words`. Each box stands alone: besides its geometry and the `angle` of
+  its text, it carries its own `text`, `start`/`end` (the part of the span on that
+  line) and the entity's `label`, `category`, `score`, `severity`, `action`,
+  `flagged` and `model`. `flagged` is false for an `allow` label; the page and
   document `severity` / `action` are the highest of their flagged entities.
 - **Long pages** are read in full, never truncated: the extractor uses
   [`extract_long`](https://github.com/fastino-ai/GLiNER2/blob/main/tutorial/12-long_context.md),

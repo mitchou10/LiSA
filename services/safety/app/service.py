@@ -85,7 +85,18 @@ class SafetyService(BaseService):
                 end=e.end,
                 score=e.score,
                 model=self.guard.name,
-                bboxes=boxes_for_span(page.words, e.start, e.end),
+                bboxes=[
+                    box.model_copy(
+                        update={
+                            "label": e.label,
+                            "score": e.score,
+                            "model": self.guard.name,
+                        }
+                    )
+                    for box in boxes_for_span(
+                        page.words, e.start, e.end, content=page.content
+                    )
+                ],
             )
             # Only what was asked for, in reading order.
             for e in sorted(raw.entities, key=lambda e: (e.start, e.end))

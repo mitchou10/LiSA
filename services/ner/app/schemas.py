@@ -103,6 +103,19 @@ class Box(BaseModel):
     height: float
     # Clockwise rotation (0, 90, 180 or 270) of the text in the box.
     angle: int = 0
+    # The part of the span this box covers: its text and offsets in the page
+    # ``content`` (set when the page content is known).
+    text: str | None = None
+    start: int | None = None
+    end: int | None = None
+    # What the entity says, repeated on every box so each one stands alone.
+    label: str | None = None
+    category: str | None = None
+    score: float | None = None
+    severity: Severity | None = None
+    action: Action | None = None
+    flagged: bool | None = None
+    model: str | None = None
 
 
 class Entity(BaseModel):

@@ -146,6 +146,7 @@ class NerService(BaseService):
             cutoff = threshold if rule.threshold is None else rule.threshold
             if ent.score < cutoff:
                 continue
+            boxes = boxes_for_span(page.words, ent.start, ent.end, content=page.content)
             entities.append(
                 Entity(
                     id=f"e{len(entities)}",
@@ -159,7 +160,20 @@ class NerService(BaseService):
                     action=rule.action,
                     flagged=rule.action != "allow",
                     model=self.extractor.name,
-                    bboxes=boxes_for_span(page.words, ent.start, ent.end),
+                    bboxes=[
+                        box.model_copy(
+                            update={
+                                "label": ent.label,
+                                "category": rule.category,
+                                "score": ent.score,
+                                "severity": rule.severity,
+                                "action": rule.action,
+                                "flagged": rule.action != "allow",
+                                "model": self.extractor.name,
+                            }
+                        )
+                        for box in boxes
+                    ],
                 )
             )
         return PageResult(

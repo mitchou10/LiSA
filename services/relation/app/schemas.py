@@ -88,6 +88,11 @@ class Box(BaseModel):
     height: float
     # Clockwise rotation (0, 90, 180 or 270) of the text in the box.
     angle: int = 0
+    # The part of the span this box covers: its text and offsets in the page
+    # ``content`` (set when the page content is known).
+    text: str | None = None
+    start: int | None = None
+    end: int | None = None
 
 
 class Endpoint(BaseModel):

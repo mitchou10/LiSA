@@ -142,9 +142,9 @@ class TestPii:
         guard.result = raw([RawEntity("email", "john@acme.com", 5, 18, 1.0)])
         out = service.process({"pages": [{"content": text, "words": words}]})
         (box,) = out["pages"][0]["entities"][0]["bboxes"]
-        assert box == pytest.approx(
-            {"x": 0.2, "y": 0.1, "width": 0.2, "height": 0.02, "angle": 0}
-        )
+        assert box["x"] == pytest.approx(0.2) and box["angle"] == 0
+        assert (box["text"], box["start"], box["end"]) == ("john@acme.com", 5, 18)
+        assert box["label"] == "email" and box["score"] == 1.0
 
     def test_no_boxes_without_words(self, service, guard):
         guard.result = raw([RawEntity("email", "a@b.c", 0, 5, 1.0)])
