@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,6 +23,21 @@ class Settings(BaseSettings):
 
     # Tesseract language(s), "+"-separated (e.g. "eng+fra").
     OCR_LANGUAGE: str = "eng+fra"
+
+    # OCR engine for the pages without a text layer: "tesseract" (LiteParse's
+    # own) or "paddleocr" (PP-OCRv5, ONNX Runtime; needs the ``paddle`` extra
+    # and the models in PADDLE_MODELS_DIR).
+    OCR_ENGINE: Literal["tesseract", "paddleocr"] = "tesseract"
+    # PaddleOCR only: detect the orientation of each page (0/90/180/270) and
+    # turn it upright before the text is read.
+    DETECT_ORIENTATION: bool = True
+    # Below this classifier score a page is left as it is.
+    ORIENTATION_MIN_SCORE: float = 0.6
+    PADDLE_MODELS_DIR: str = "/models"
+    PADDLE_DET_MODEL: str = "PP-OCRv5_mobile_det_onnx"
+    PADDLE_REC_MODEL: str = "latin_PP-OCRv5_mobile_rec_onnx"
+    PADDLE_ORIENTATION_MODEL: str = "PP-LCNet_x1_0_doc_ori_onnx"
+    PADDLE_THREADS: int = 2
 
     # Safety limits.
     MAX_FILE_MB: float = 10.0

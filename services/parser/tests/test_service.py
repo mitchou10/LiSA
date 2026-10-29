@@ -356,3 +356,112 @@ def test_settings_read_the_environment(monkeypatch):
     monkeypatch.setenv("MAX_FILE_MB", "2.5")
     cfg = Settings()
     assert cfg.BLUR_SCREENSHOTS is False and cfg.MAX_FILE_MB == 2.5
+
+
+class _FakeOcr:
+    """Stands in for PaddleOCR: one line, a box in pixels of the image it is given."""
+
+    def __init__(self):
+        self.seen: list[tuple[int, int]] = []
+
+    def predict(self, image):
+        self.seen.append((image.shape[1], image.shape[0]))
+        return [
+            {
+                "rec_texts": ["Marie Curie", "  "],
+                "rec_scores": [0.98, 0.5],
+                "rec_boxes": [[90, 20, 450, 80], [0, 0, 1, 1]],
+            }
+        ]
+
+
+class _FakeClassifier:
+    def __init__(self, label="0", score=0.99):
+        self.label, self.score = label, score
+
+    def predict(self, image):
+        return [{"label_names": [self.label], "scores": [self.score]}]
+
+
+@pytest.fixture
+def paddle_service(service, monkeypatch):
+    from app.paddle import PaddleEngine
+
+    monkeypatch.setattr(settings, "OCR_ENGINE", "paddleocr")
+    ocr = _FakeOcr()
+    classifier = _FakeClassifier()
+    service.paddle = PaddleEngine(
+        ocr_factory=lambda: ocr, orientation_factory=lambda: classifier
+    )
+    service.fake_ocr, service.fake_classifier = ocr, classifier
+    return service
+
+
+class TestPaddleOcr:
+    def test_scanned_image_is_read_by_paddleocr(self, paddle_service, png_bytes):
+        page = paddle_service.parse_file(
+            "scan.png", "image/png", png_bytes, key_prefix="p"
+        )[0]
+        assert page["content"] == "Marie Curie"
+        assert {b["model"] for b in (*page["words"], *page["lines"])} == {"paddleocr"}
+        assert page["lines"][0]["confidence"] == 0.98
+        assert page["orientation"] == 0
+        _assert_offsets_match(page)
+        for box in page["lines"]:
+            assert 0 <= box["x"] and box["x"] + box["width"] <= 1 + 1e-9
+            assert 0 <= box["y"] and box["y"] + box["height"] <= 1 + 1e-9
+
+    def test_pdf_with_text_layer_is_not_ocrised(self, paddle_service, pdf_bytes):
+        pages = paddle_service.parse_file("d.pdf", None, pdf_bytes, key_prefix="p")
+        assert {b["model"] for b in pages[0]["words"]} == {"liteparse"}
+        assert paddle_service.fake_ocr.seen == []
+
+    def test_rotated_page_is_turned_upright(self, paddle_service, png_bytes):
+        from PIL import Image
+
+        paddle_service.fake_classifier.label = "90"
+        # The same scan, rotated 90 degrees clockwise.
+        with Image.open(io.BytesIO(png_bytes)) as image:
+            buf = io.BytesIO()
+            image.rotate(-90, expand=True).save(buf, format="PNG")
+        page = paddle_service.parse_file(
+            "scan.png", "image/png", buf.getvalue(), key_prefix="p", blur=False
+        )[0]
+        assert page["orientation"] == 90
+        stored = Image.open(
+            io.BytesIO(paddle_service.storage.client.objects["p/1.png"])
+        )
+        # Upright again: wider than tall, and OCR saw the upright image.
+        assert stored.width > stored.height
+        assert paddle_service.fake_ocr.seen == [stored.size]
+
+    def test_unsure_classifier_leaves_the_page(self, paddle_service, png_bytes):
+        paddle_service.fake_classifier.label = "180"
+        paddle_service.fake_classifier.score = 0.2
+        page = paddle_service.parse_file(
+            "scan.png", "image/png", png_bytes, key_prefix="p"
+        )[0]
+        assert page["orientation"] == 0
+
+    def test_orientation_detection_can_be_disabled(
+        self, paddle_service, png_bytes, monkeypatch
+    ):
+        monkeypatch.setattr(settings, "DETECT_ORIENTATION", False)
+        paddle_service.fake_classifier.label = "90"
+        page = paddle_service.parse_file(
+            "scan.png", "image/png", png_bytes, key_prefix="p"
+        )[0]
+        assert page["orientation"] == 0
+        assert page["content"] == "Marie Curie"
+
+
+def test_upright_png_undoes_a_clockwise_rotation(png_bytes):
+    from app.imaging import upright_png
+    from PIL import Image, ImageChops
+
+    with Image.open(io.BytesIO(png_bytes)) as original:
+        original = original.convert("RGB")
+        buf = io.BytesIO()
+        original.rotate(-270, expand=True).save(buf, format="PNG")
+    fixed = Image.open(io.BytesIO(upright_png(buf.getvalue(), 270))).convert("RGB")
+    assert ImageChops.difference(original, fixed).getbbox() is None

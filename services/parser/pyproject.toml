@@ -1,7 +1,7 @@
 [project]
 name = "lisa-service-parser"
 version = "0.1.0"
-description = "LiSA worker service: document parsing and OCR (Tesseract via LiteParse) producing page images, text and word bounding boxes."
+description = "LiSA worker service: document parsing and OCR (LiteParse with Tesseract or PaddleOCR, page orientation) producing page images, text and word bounding boxes."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
@@ -15,10 +15,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# OCR_ENGINE=paddleocr: PaddleOCR runs the ONNX models through ONNX Runtime
+# (PaddlePaddle itself is not installed).
+paddle = [
+    "paddleocr>=3.7.0",
+    "onnxruntime>=1.20.0",
+    "numpy>=2.0",
+]
 dev = [
     "pytest>=8.0",
     "pytest-mock>=3.12",
     "reportlab>=4.0",
+    "numpy>=2.0",
 ]
 
 [build-system]
