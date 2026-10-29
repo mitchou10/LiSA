@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.0](https://github.com/mitchou10/LiSA/compare/v1.7.1...v1.8.0) (2026-10-29)
+
+
+### Features
+
+* keep the page orientation and write replacements along the text angle ([7c7ca44](https://github.com/mitchou10/LiSA/commit/7c7ca446270e7bc05d2c84ad9159e2c4fc440808))
+* **parser:** add PaddleOCR engine with page orientation detection ([db18fc4](https://github.com/mitchou10/LiSA/commit/db18fc42601bf3ff91c075409a6dd29467f8bd21))
+
 ## [1.7.1](https://github.com/mitchou10/LiSA/compare/v1.7.0...v1.7.1) (2026-10-27)
 
 
