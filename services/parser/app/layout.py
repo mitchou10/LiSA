@@ -66,19 +66,25 @@ def _word_boxes(
     ]
 
 
-def build_page(parsed_page: Any) -> Page:
-    """Convert a LiteParse page into a ``Page`` (no filename / screenshot yet)."""
+def build_page(
+    parsed_page: Any, *, ocr_model: str = OCR_MODEL, items: list[Any] | None = None
+) -> Page:
+    """Convert a LiteParse page into a ``Page`` (no filename / screenshot yet).
+
+    ``items`` replaces the page's own text items (OCR lines in page units);
+    ``ocr_model`` names the engine behind the items that carry a confidence.
+    """
     width, height = parsed_page.width, parsed_page.height
     lines: list[Line] = []
     words: list[Word] = []
     parts: list[str] = []
     cursor = 0
-    for item in parsed_page.text_items:
+    for item in parsed_page.text_items if items is None else items:
         text = item.text
         if not text.strip():
             continue
         # No OCR confidence means the text came from the PDF's own text layer.
-        model = NATIVE_MODEL if item.confidence is None else OCR_MODEL
+        model = NATIVE_MODEL if item.confidence is None else ocr_model
         lines.append(
             Line(
                 text=text,

@@ -21,3 +21,12 @@ def blur_png(image_bytes: bytes) -> bytes:
         out = io.BytesIO()
         image.filter(ImageFilter.GaussianBlur(radius)).save(out, format="PNG")
         return out.getvalue()
+
+
+def upright_png(image_bytes: bytes, angle: int) -> bytes:
+    """Undo a clockwise rotation of ``angle`` degrees (90, 180 or 270)."""
+    with Image.open(io.BytesIO(image_bytes)) as image:
+        out = io.BytesIO()
+        # PIL rotates counter-clockwise.
+        image.rotate(angle, expand=True).save(out, format="PNG")
+        return out.getvalue()

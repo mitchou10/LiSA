@@ -2,7 +2,9 @@
 
 Celery worker that turns PDFs and images into pages the rest of the pipeline
 can use. Built on [LiteParse](https://github.com/run-llama/liteparse): native
-PDF text extraction, Tesseract OCR only where a page has no text layer.
+PDF text extraction, OCR only where a page has no text layer: Tesseract
+(default) or PaddleOCR (`OCR_ENGINE=paddleocr`), which also detects the
+orientation of each page.
 
 - Service name: `liteparse-ocr` (type `other`), queue `liteparse-ocr`.
 - It reads the file, extracts the text and boxes, and takes the screenshots.
@@ -23,8 +25,11 @@ PDF text extraction, Tesseract OCR only where a page has no text layer.
     convention as the anonymize `bboxes`) and `start`/`end` offsets
     into `content`. An analyser entity (`start_char`/`end_char`) maps to the
     words overlapping that range. Every box also carries `model`, the engine
-    that produced it: `liteparse` (the PDF's own text layer) or `tesseract` (OCR). The page's own `width` / `height` (page units, e.g.
+    that produced it: `liteparse` (the PDF's own text layer) or `tesseract` or `paddleocr` (OCR). The page's own `width` / `height` (page units, e.g.
     PDF points) are kept to recover absolute positions.
+  - `orientation` is the clockwise rotation (0, 90, 180, 270) the page had in the
+    source and that was undone: text, boxes and screenshot are upright. Always 0
+    unless `OCR_ENGINE=paddleocr`.
   - `s3_key` is `pages/<task>/<file>/<source page>.png`, the page screenshot
     in object storage (the task fails if `S3_BUCKET` is not configured).
 
@@ -33,6 +38,10 @@ PDF text extraction, Tesseract OCR only where a page has no text layer.
 | Variable | Default | Meaning |
 |---|---|---|
 | `OCR_LANGUAGE` | `eng+fra` | Tesseract languages (also a build arg, baked into the image) |
+| `OCR_ENGINE` | `tesseract` | `tesseract` or `paddleocr` (PP-OCRv5 via ONNX Runtime; build the image with `--build-arg OCR_ENGINE=paddleocr`, which installs the `paddle` extra and bakes the models in) |
+| `DETECT_ORIENTATION` | `true` | PaddleOCR only: classify each page (PP-LCNet doc orientation) and turn it upright before reading it |
+| `ORIENTATION_MIN_SCORE` | `0.6` | Below this classifier score the page is left as it is |
+| `PADDLE_MODELS_DIR` | `/models` | Folder of the ONNX models (`PADDLE_DET_MODEL`, `PADDLE_REC_MODEL`, `PADDLE_ORIENTATION_MODEL` name the sub-folders); `PADDLE_THREADS` (2) sets ONNX Runtime's threads |
 | `MAX_FILE_MB` | `10` | Per-file size limit |
 | `MAX_PAGES` | `50` | Pages kept per file |
 | `S3_BUCKET` | – (required) | Bucket for the page screenshots |
