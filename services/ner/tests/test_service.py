@@ -159,7 +159,9 @@ class TestEntities:
         fake.found = [RawEntity("email", "john@acme.com", 5, 18, 0.99)]
         out = service.process({"pages": [{"content": text, "words": words}]})
         (box,) = out["pages"][0]["entities"][0]["bboxes"]
-        assert box == pytest.approx({"x": 0.2, "y": 0.1, "width": 0.2, "height": 0.02})
+        assert box == pytest.approx(
+            {"x": 0.2, "y": 0.1, "width": 0.2, "height": 0.02, "angle": 0}
+        )
 
     def test_the_parser_pages_are_accepted_as_they_are(self, service):
         page = {
