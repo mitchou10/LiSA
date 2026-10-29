@@ -81,8 +81,11 @@ def _with_overrides(
     for number, items in entities.items():
         fixed = []
         for e in items:
+            # The corrected geometry replaces the detected one; the text keeps its angle.
             boxes = [
-                overrides.get((number, e.get("id"), i), b)
+                {**b, **overrides[(number, e.get("id"), i)]}
+                if (number, e.get("id"), i) in overrides
+                else b
                 for i, b in enumerate(e.get("bboxes") or [])
             ]
             fixed.append({**e, "bboxes": boxes})
@@ -97,37 +100,49 @@ def _font(size: int) -> ImageFont.ImageFont:
         return ImageFont.load_default()
 
 
-def _write_replacement(img: Image.Image, boxes: list[list[float]], text: str) -> None:
+def _write_replacement(
+    img: Image.Image, boxes: list[tuple[list[float], int]], text: str
+) -> None:
     """Black on white, simple: every box is painted white and outlined; the
-    text goes in the first one, as large as fits."""
+    text goes in the first one, as large as fits, along the angle of the text
+    it replaces (0, 90, 180 or 270 degrees clockwise)."""
     draw = ImageDraw.Draw(img)
-    for x1, y1, x2, y2 in boxes:
+    for (x1, y1, x2, y2), _ in boxes:
         draw.rectangle(
             [x1, y1, x2, y2],
             fill="white",
             outline="black",
             width=max(1, int((y2 - y1) // 14)),
         )
-    x1, y1, x2, y2 = boxes[0]
+    (x1, y1, x2, y2), angle = boxes[0]
+    # The text is laid out on a horizontal strip, then turned onto the page:
+    # `length` runs along the text, `thick` across it.
+    turned = angle in (90, 270)
+    length, thick = ((y2 - y1), (x2 - x1)) if turned else ((x2 - x1), (y2 - y1))
+    strip = Image.new("RGBA", (max(1, round(length)), max(1, round(thick))), (0,) * 4)
+    pen = ImageDraw.Draw(strip)
     pad = 3
-    size = max(8, int((y2 - y1) * 0.7))
+    size = max(8, int(thick * 0.7))
     font = _font(size)
     while size > 8:
-        left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
-        if right - left <= (x2 - x1) - 2 * pad:
+        left, top, right, bottom = pen.textbbox((0, 0), text, font=font)
+        if right - left <= length - 2 * pad:
             break
         size -= 1
         font = _font(size)
-    left, top, right, bottom = draw.textbbox((0, 0), text, font=font)
-    draw.text(
+    left, top, right, bottom = pen.textbbox((0, 0), text, font=font)
+    pen.text(
         (
-            x1 + ((x2 - x1) - (right - left)) / 2 - left,
-            y1 + ((y2 - y1) - (bottom - top)) / 2 - top,
+            (length - (right - left)) / 2 - left,
+            (thick - (bottom - top)) / 2 - top,
         ),
         text,
         fill="black",
         font=font,
     )
+    # PIL turns counter-clockwise.
+    strip = strip.rotate(-angle, expand=True)
+    img.paste(strip, (round(x1), round(y1)), strip)
 
 
 def _selected(entity_ids: list[str] | None) -> set[str] | None:
@@ -150,8 +165,11 @@ def _keeps(entity: dict[str, Any], page_number: int, keep: set[str] | None) -> b
     return eid in keep or f"{page_number}:{eid}" in keep
 
 
-def _pixel_boxes(entity: dict[str, Any], size: tuple[int, int]) -> list[list[float]]:
-    """The entity's boxes (fractions of the page) as pixel [x1, y1, x2, y2]."""
+def _pixel_boxes(
+    entity: dict[str, Any], size: tuple[int, int]
+) -> list[tuple[list[float], int]]:
+    """The entity's boxes (fractions of the page) as pixel [x1, y1, x2, y2],
+    each with the angle of its text (clockwise degrees, 0 when unknown)."""
     w, h = size
     out = []
     for b in entity.get("bboxes") or []:
@@ -160,7 +178,7 @@ def _pixel_boxes(entity: dict[str, Any], size: tuple[int, int]) -> list[list[flo
         x2 = max(0.0, min(1.0, b.get("x", 0.0) + b.get("width", 0.0))) * w
         y2 = max(0.0, min(1.0, b.get("y", 0.0) + b.get("height", 0.0))) * h
         if x2 > x1 and y2 > y1:
-            out.append([x1, y1, x2, y2])
+            out.append(([x1, y1, x2, y2], int(b.get("angle") or 0)))
     return out
 
 
@@ -296,7 +314,7 @@ class RenderService:
         boxes: list[list[float]] = []
         labels: list[str] = []
         # The entities with a replacement are written over, not blurred.
-        replaced: list[tuple[list[list[float]], str]] = []
+        replaced: list[tuple[list[tuple[list[float], int]], str]] = []
         blurred: list[bool] = []
         for e in kept:
             text = None
@@ -305,7 +323,7 @@ class RenderService:
             own = _pixel_boxes(e, img.size)
             if text and own:
                 replaced.append((own, text))
-            for box in own:
+            for box, _ in own:
                 boxes.append(box)
                 labels.append(e.get("label", ""))
                 blurred.append(not text)

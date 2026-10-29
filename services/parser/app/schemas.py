@@ -33,6 +33,10 @@ class Box(BaseModel):
     # Engine that produced the box: "liteparse" (native text layer),
     # "tesseract" or "paddleocr" (OCR).
     model: str
+    # Clockwise rotation (0, 90, 180 or 270) of the text on the page as it is:
+    # the box is the same axis-aligned fraction of the page, the text runs along
+    # it in this direction.
+    angle: int = 0
 
 
 class Word(Box):
@@ -57,9 +61,9 @@ class Page(BaseModel):
     lines: list[Line] = Field(default_factory=list)
     words: list[Word] = Field(default_factory=list)
     blurred: bool = True
-    # Clockwise rotation (0, 90, 180 or 270) the page had in the source and
-    # that was undone: text, boxes and screenshot are upright. Detected with
-    # PaddleOCR only, otherwise 0.
+    # Clockwise rotation (0, 90, 180 or 270) of a scanned page, detected with
+    # PaddleOCR (otherwise 0). The page is kept as it is: its boxes carry the
+    # same angle.
     orientation: int = 0
     s3_key: str | None = Field(
         default=None, description="Key of the page screenshot in the bucket."

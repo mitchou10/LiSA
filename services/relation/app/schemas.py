@@ -38,6 +38,8 @@ class InputWord(BaseModel):
     height: float
     start: int
     end: int
+    # Clockwise rotation (0, 90, 180 or 270) of the text on the page.
+    angle: int = 0
 
 
 class InputPage(BaseModel):
@@ -84,6 +86,8 @@ class Box(BaseModel):
     y: float
     width: float
     height: float
+    # Clockwise rotation (0, 90, 180 or 270) of the text in the box.
+    angle: int = 0
 
 
 class Endpoint(BaseModel):

@@ -351,6 +351,24 @@ class TestBackendsSettingsAndBoxes:
         cfg = Settings(REDIS_URL="redis://r:6379/1")
         assert cfg.CELERY_BROKER_URL == cfg.CELERY_RESULT_BACKEND == "redis://r:6379/1"
 
+    def test_boxes_follow_the_angle_of_the_text(self):
+        def w(x, y, start, end, angle):
+            return InputWord(
+                x=x, y=y, width=0.02, height=0.1, start=start, end=end, angle=angle
+            )
+
+        # Text turned 90 degrees reads top to bottom: its words stack along y and
+        # share a line when they overlap in x.
+        boxes = boxes_for_span(
+            [w(0.8, 0.1, 0, 3, 90), w(0.8, 0.3, 4, 7, 90), w(0.5, 0.1, 8, 11, 90)],
+            0,
+            11,
+        )
+        assert [b.angle for b in boxes] == [90, 90]
+        assert boxes[1].height == pytest.approx(0.3) and boxes[
+            1
+        ].width == pytest.approx(0.02)
+
     def test_boxes_one_per_line(self):
         def w(x, y, start, end):
             return InputWord(x=x, y=y, width=0.1, height=0.02, start=start, end=end)

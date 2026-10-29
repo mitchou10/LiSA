@@ -19,7 +19,7 @@ def _unit(value: float, size: float) -> float:
 
 
 def _word_boxes(
-    item: Any, line_start: int, page_w: float, page_h: float, model: str
+    item: Any, line_start: int, page_w: float, page_h: float, model: str, angle: int
 ) -> list[Word]:
     """Word boxes of one text line, with offsets relative to the page text.
 
@@ -38,6 +38,7 @@ def _word_boxes(
             start=line_start + a,
             end=line_start + b,
             model=model,
+            angle=angle,
         )
 
     boxes: list[Word] = []
@@ -52,18 +53,28 @@ def _word_boxes(
         return boxes
 
     total = max(len(text), 1)
-    return [
-        word(
-            m.group(),
-            item.x + item.width * m.start() / total,
-            item.y,
-            item.width * (m.end() - m.start()) / total,
-            item.height,
-            m.start(),
-            m.end(),
-        )
-        for m in _TOKEN_RE.finditer(text)
-    ]
+    out = []
+    for m in _TOKEN_RE.finditer(text):
+        # The share of the line this word covers, along the direction of the text.
+        a, b = m.start() / total, m.end() / total
+        if angle in (180, 270):
+            a, b = 1 - b, 1 - a
+        if angle in (90, 270):
+            x, y, w, h = (
+                item.x,
+                item.y + item.height * a,
+                item.width,
+                item.height * (b - a),
+            )
+        else:
+            x, y, w, h = (
+                item.x + item.width * a,
+                item.y,
+                item.width * (b - a),
+                item.height,
+            )
+        out.append(word(m.group(), x, y, w, h, m.start(), m.end()))
+    return out
 
 
 def build_page(
@@ -85,6 +96,7 @@ def build_page(
             continue
         # No OCR confidence means the text came from the PDF's own text layer.
         model = NATIVE_MODEL if item.confidence is None else ocr_model
+        angle = getattr(item, "angle", 0)
         lines.append(
             Line(
                 text=text,
@@ -96,9 +108,10 @@ def build_page(
                 end=cursor + len(text),
                 confidence=item.confidence,
                 model=model,
+                angle=angle,
             )
         )
-        words.extend(_word_boxes(item, cursor, width, height, model))
+        words.extend(_word_boxes(item, cursor, width, height, model, angle))
         parts.append(text)
         cursor += len(text) + 1  # "\n" separator
     return Page(
