@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/mitchou10/LiSA/compare/v1.8.0...v1.9.0) (2026-10-29)
+
+
+### Features
+
+* **ner,safety:** carry the entity information on every box ([b5d3acf](https://github.com/mitchou10/LiSA/commit/b5d3acf3b0402b18a3a56bc5f00bfe76fb4afa69))
+
 ## [1.8.0](https://github.com/mitchou10/LiSA/compare/v1.7.1...v1.8.0) (2026-10-29)
 
 
