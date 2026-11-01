@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM python:3.13-slim AS builder
+FROM python:3.15-slim AS builder
 WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY pyproject.toml ./
@@ -9,7 +9,7 @@ COPY alembic.ini ./
 COPY migrations ./migrations
 RUN uv pip install --system --no-cache .
 
-FROM python:3.13-slim AS runtime
+FROM python:3.15-slim AS runtime
 # libgl1/libglib2.0-0: OpenCV (supervision's rendering backend) needs them.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libgl1 libglib2.0-0 \
