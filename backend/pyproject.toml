@@ -4,7 +4,7 @@ version = "1.8.0"
 description = "LiSA backend API: services & tasks management"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi>=0.143.0",
+    "fastapi>=0.162.0",
     "uvicorn[standard]>=0.54.0",
     "sqlalchemy[asyncio]>=2.1.4",
     "asyncpg>=0.32.0",
