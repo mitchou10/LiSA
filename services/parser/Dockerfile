@@ -2,7 +2,7 @@
 
 # Build context must be the repository root (see docker-compose.yml) so that
 # both the worker package and this service can be copied.
-FROM python:3.12-slim AS builder
+FROM python:3.15-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -55,7 +55,7 @@ ENV OCR_LANGUAGE=${OCR_LANGUAGE}
 ENV HF_HOME=/opt/hf
 RUN python -m app.warmup
 
-FROM python:3.12-slim AS runtime
+FROM python:3.15-slim AS runtime
 ARG OCR_ENGINE=tesseract
 ENV OCR_ENGINE=${OCR_ENGINE}
 # OpenCV (a dependency of PaddleOCR) loads these two at import.
