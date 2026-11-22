@@ -2,7 +2,7 @@
 
 # Build context must be the repository root (see docker-compose.yml) so that
 # both the worker package and this service can be copied.
-FROM python:3.11-slim AS builder
+FROM python:3.15-slim AS builder
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -27,7 +27,7 @@ COPY services/anonymize/README.md ./
 COPY services/anonymize/app ./app
 RUN uv pip install --system --no-cache --no-sources .
 
-FROM python:3.11-slim AS runtime
+FROM python:3.15-slim AS runtime
 # pip is a build tool: the runtime image never installs anything, and the pip bundled with the base
 # image carries known CVEs. Removed rather than upgraded, so there is nothing left to keep patched.
 RUN python -m pip uninstall -y pip
